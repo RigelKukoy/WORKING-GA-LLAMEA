@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "AdaptiveHybridPSO_DE_v3", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 88, "evals": 10000, "best": {"evals": 6654, "y": 1.3202683490140405e-10, "x": [-3.802065649211436, 2.1956205149022434, 2.3740011171895845, 2.714698563551505, 2.17507441968935]}}
+		]}
+	]
+}

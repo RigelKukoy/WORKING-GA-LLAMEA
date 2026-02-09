@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "AdaptiveDE", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 48, "evals": 10000, "best": {"evals": 9996, "y": 0.03908331843605247, "x": [3.259379776411981, -1.832358110623804, 1.6018876184947506, 1.4977656024696493, 0.0462610814503397]}}
+		]}
+	]
+}

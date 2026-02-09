@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "AdaptiveCulturalDifferentialEvolution", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 92, "evals": 10000, "best": {"evals": 4591, "y": 4.2026015989179763e-11, "x": [-0.29986087042423915, -1.6107552552893718, 2.4763285625715232, -4.106969226254634, -2.493666990835557]}}
+		]}
+	]
+}
