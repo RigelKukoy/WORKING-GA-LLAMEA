@@ -3,6 +3,7 @@ from .llamea import LLaMEA
 from .random_search import RandomSearch
 from .lhns import LHNS_Method
 from .mcts_ahd import MCTS_Method
+from .ga_llamea import GA_LLaMEA_Method
 
 try:
     from .eoh import EoH
@@ -14,6 +15,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 __all__ = [
     "LLaMEA",
+    "GA_LLaMEA_Method",
     "RandomSearch",
     "EoH",
     "funsearch",

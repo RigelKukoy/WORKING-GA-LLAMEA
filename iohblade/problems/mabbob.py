@@ -192,7 +192,7 @@ Give an excellent and novel heuristic algorithm to solve this task and also give
                 aucs.append(correct_aoc(f_new, l2, budget))
                 l2.reset(f_new)
                 if test:
-                    l1.reset(f_new)
+                    l1.reset()
                 f_new.reset()
 
         auc_mean = np.mean(aucs)

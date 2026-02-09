@@ -37,6 +37,10 @@ class ExperimentLogger:
 
         self.dirs = []
         self._lock = Lock()
+        
+        # Convert to absolute path to facilitate CWD changes
+        name = os.path.abspath(name)
+
         if read:
             # Only reading previous results
             self.dirs.append(name)
@@ -73,6 +77,8 @@ class ExperimentLogger:
         Register another finished experiment so that *this* logger will read it
         when you call get_data(), get_problem_data(), etc.
         """
+        dir_path = os.path.abspath(dir_path)
+
         if not os.path.isdir(dir_path):
             raise ValueError(f"{dir_path} is not a directory")
         if not os.path.isfile(os.path.join(dir_path, "experimentlog.jsonl")):
@@ -87,7 +93,7 @@ class ExperimentLogger:
         while os.path.exists(dirname):
             tempi += 1
             dirname = f"{name}-{tempi}"
-        os.mkdir(dirname)
+        os.makedirs(dirname)
         return dirname
 
     def _before_open_run(self, run_name, method, problem, budget, seed):
@@ -227,7 +233,7 @@ class ExperimentLogger:
             if not os.path.exists(exp_log):
                 continue
             with jsonlines.open(exp_log) as file:
-                for line in file:
+                for line in file.iter(skip_empty=True, skip_invalid=True):
                     if line["problem_name"] != problem_name:
                         continue
                     logdir = os.path.join(
@@ -256,7 +262,7 @@ class ExperimentLogger:
             if not os.path.exists(exp_log):
                 continue
             with jsonlines.open(exp_log) as file:
-                for line in file:
+                for line in file.iter(skip_empty=True, skip_invalid=True):
                     methods.add(line["method_name"])
                     problems.add(line["problem_name"])
         return list(methods), list(problems)

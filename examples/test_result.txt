@@ -1,0 +1,8 @@
+iohblade location: C:\Users\Kukoy\OneDrive\Documents\BLADE-WORKING\BLADE\iohblade\__init__.py
+ExperimentLogger location: iohblade.loggers.base
+Original CWD: C:\Users\Kukoy\OneDrive\Documents\BLADE-WORKING\BLADE
+Call 1 (Original CWD): Found 1 problems.
+Changed CWD to: C:\Users\Kukoy\OneDrive\Documents\BLADE-WORKING
+Call 2 (New CWD): Found 1 problems.
+SUCCESS: Found problems after CWD change.
+PASS

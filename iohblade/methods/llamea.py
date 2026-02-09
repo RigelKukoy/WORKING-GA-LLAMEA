@@ -32,7 +32,7 @@ class LLaMEA(Method):
         self.llamea_instance = LLAMEA_Algorithm(
             f=problem,  # Ensure evaluation integrates with our framework
             llm=self.llm,
-            role_prompt="You are an excellent Python programmer.",  # not needed, it is part of the task prompt.
+            role_prompt="You are a highly skilled computer scientist in the field of natural computing. Your task is to design novel metaheuristic algorithms to solve black box optimization problems.",
             task_prompt=problem.task_prompt,
             example_prompt=problem.example_prompt,
             output_format_prompt=problem.format_prompt,

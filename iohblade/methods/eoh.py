@@ -41,7 +41,13 @@ class _BladePrompts:
         return self.problem.init_inputs
 
     def get_func_outputs(self):
-        return self.problem.func_outputs
+        # EoH's code extraction regex strips everything after the last
+        # ``return`` keyword and appends these output names.  Because the
+        # generated code uses instance variables (self.f_opt, self.x_opt),
+        # we must include the ``self.`` prefix so the reconstructed return
+        # statement is ``return self.f_opt, self.x_opt`` instead of the
+        # bare ``return f_opt, x_opt`` which causes a NameError.
+        return ["self." + o for o in self.problem.func_outputs]
 
     def get_inout_inf(self):
         return (

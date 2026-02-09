@@ -892,7 +892,7 @@ def plot_token_usage(
             )
             if os.path.isfile(convo_path):
                 with jsonlines.open(convo_path) as f:
-                    for line in f:
+                    for line in f.iter(skip_empty=True, skip_invalid=True):
                         newtokens = line.get("tokens", 0)
                         if newtokens > 0:
                             tokens += line.get("tokens", 0)

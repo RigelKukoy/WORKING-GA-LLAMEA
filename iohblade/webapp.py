@@ -167,7 +167,7 @@ def run() -> None:
         st.title("Conversation Log")
         if os.path.exists(log_path):
             with jsonlines.open(log_path) as f:
-                for msg in f:
+                for msg in f.iter(skip_empty=True, skip_invalid=True):
                     role = msg.get("role", "assistant")
                     content = msg.get("content", "")
                     chat_role = (

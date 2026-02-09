@@ -15,7 +15,7 @@ import numpy as np
 
 # Standard packages installed in every evaluation environment
 BASE_DEPENDENCIES = [
-    "numpy>=2",
+    "numpy",
     "cloudpickle>=3.1.0,<4",
     "joblib>=1.4.2,<2",
 ]
