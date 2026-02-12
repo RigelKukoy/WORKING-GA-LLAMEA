@@ -19,10 +19,10 @@ if __name__ == "__main__":
     for llm in [llm1]:#, llm2]:
         # GA-LLAMEA uses Discounted Thompson Sampling to adaptively select operators
         # Instead of fixed mutation prompts, it learns which operator works best:
-        # - mutation: refine single parent
-        # - crossover: combine two parents  
-        # - random_new: generate from scratch
-        GA_LLaMEA_method1 = GA_LLaMEA_Method(llm, budget=budget, name="GA-LLAMEA-1", n_parents=4, n_offspring=8, elitism=True, discount=0.9, tau_max=0.2)
+        # - simplify: refine and simplify a single parent
+        # - crossover: guided concept transfer between two parents
+        # - random_new: generate from scratch (with structural reference)
+        GA_LLaMEA_method1 = GA_LLaMEA_Method(llm, budget=budget, name="GA-LLAMEA-1", n_parents=4, n_offspring=8, elitism=True, discount=0.9, tau_max=0.1)
 
         methods = [GA_LLaMEA_method1]
         logger = ExperimentLogger("results/GA-LLAMEA")

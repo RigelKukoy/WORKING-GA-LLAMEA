@@ -187,12 +187,22 @@ Code:
 
 
 class CrossoverOperator(BaseOperator):
-    """Crossover operator: Combine the best elements of two parent algorithms.
+    """Crossover operator: Guided Concept Transfer between two parent algorithms.
     
-    This operator takes two parent algorithms and asks the LLM to create
-    an improved algorithm by using one parent as the foundation and
-    incorporating a specific mechanism from the other. This focused
-    approach produces cleaner code than naive "combine everything" prompts.
+    This operator uses a concept-level crossover strategy inspired by EoH but
+    unique to GA-LLAMEA. Instead of giving the LLM two full code implementations
+    to merge (which produces Frankenstein code), it:
+    
+    1. Shows the better parent's FULL CODE as the working reference
+    2. Shows the weaker parent's NAME and DESCRIPTION only (no code)
+    3. Asks the LLM to redesign the first algorithm by incorporating the
+       strategic concept from the second — writing code from scratch
+    
+    This "Guided Concept Transfer" approach avoids code-merging failures because:
+    - The LLM only sees one code implementation
+    - The second parent is described abstractly, forcing the LLM to understand
+      the concept and implement it fresh rather than copy-pasting
+    - Explicit instruction to write from scratch prevents concatenation
     
     When to use:
         - When you have multiple good algorithms with different strategies
@@ -202,8 +212,8 @@ class CrossoverOperator(BaseOperator):
     Prompt structure:
         1. Task description + example
         2. Population history
-        3. Both parents' code + fitness
-        4. Focused instruction: use P1 as base, incorporate best of P2
+        3. Better parent's full code + weaker parent's name/description
+        4. Instruction: redesign using the concept, write from scratch
         5. Output format
     """
     
@@ -219,13 +229,13 @@ class CrossoverOperator(BaseOperator):
         parent2: Any = None,
         **kwargs
     ) -> str:
-        """Build prompt for crossover operator.
+        """Build prompt for crossover operator (Guided Concept Transfer).
         
         Args:
             problem: Optimization problem
             population: Current population
-            parent: First parent (higher fitness, used as foundation)
-            parent2: Second parent (contributes a mechanism)
+            parent: First parent (higher fitness, provides full code)
+            parent2: Second parent (provides name/description only as inspiration)
             
         Returns:
             Complete crossover prompt
@@ -236,22 +246,24 @@ class CrossoverOperator(BaseOperator):
         task_prompt = self._get_task_prompt(problem)
         history = self._get_population_history(population)
         
+        # Only show the better parent's full code
+        # The weaker parent is described abstractly to prevent code-merging
+        parent2_description = ""
+        if hasattr(parent2, 'description') and parent2.description:
+            parent2_description = f"\nStrategy: {parent2.description}"
+        
         algo_details = f"""
-Algorithm 1 - Foundation (fitness: {parent.fitness:.4f}):
+Working Algorithm (fitness: {parent.fitness:.4f}):
 ```python
 {parent.code}
 ```
 
-Algorithm 2 - Inspiration (fitness: {parent2.fitness:.4f}):
-```python
-{parent2.code}
-```
+Alternative approach for inspiration: "{parent2.name}" (fitness: {parent2.fitness:.4f}){parent2_description}
 """
-        instruction = f"""Given the two algorithms above, create an improved algorithm that:
-1. Uses the core search strategy from Algorithm 1 (fitness: {parent.fitness:.4f}) as the foundation.
-2. Incorporates the most effective mechanism from Algorithm 2 (fitness: {parent2.fitness:.4f}) to address a weakness in Algorithm 1.
-3. Keep the implementation simple and use only numpy. Do not over-complicate by merging everything -- pick the best elements.
-The new algorithm should be a clean, working implementation, not a direct concatenation of both algorithms."""
+        instruction = f"""Create an improved algorithm by redesigning the working algorithm above.
+Draw inspiration from the alternative approach "{parent2.name}" — think about what strategic concept it might use that could address a weakness in the working algorithm.
+Write a clean implementation from scratch. Do not copy-paste code.
+Use only numpy. Keep it simple and functional."""
         
         return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
 
@@ -263,6 +275,12 @@ class RandomNewOperator(BaseOperator):
     different from what's been tried before. This maintains exploration
     and can discover entirely new approaches.
     
+    To reduce the high failure rate (~40%) from structural errors (missing
+    __call__, wrong return types, array shape mismatches), the prompt includes
+    the best existing algorithm's code as a structural reference when available.
+    The LLM is explicitly told to use a DIFFERENT strategy — the reference is
+    only for correct code structure and formatting.
+    
     When to use:
         - To escape local optima
         - When existing algorithms have converged
@@ -271,8 +289,9 @@ class RandomNewOperator(BaseOperator):
     Prompt structure:
         1. Task description + example
         2. Population history (to avoid repetition)
-        3. "Generate a completely new approach"
-        4. Output format
+        3. Working reference code for structure (when available)
+        4. "Generate a completely new approach"
+        5. Output format
     """
     
     @property
@@ -308,10 +327,23 @@ class RandomNewOperator(BaseOperator):
             history = "" # No history for initialization
             # Avoid extra newlines when instruction and history are empty
             return f"{task_prompt}\n\n{problem.format_prompt}"
-        else:
-            instruction = "Generate a new algorithm that is different from the algorithms you have tried before."
         
-        return f"{task_prompt}\n\n{history}\n\n{instruction}\n\n{problem.format_prompt}"
+        # Include best solution as structural reference to reduce -inf failures
+        reference = ""
+        if population:
+            best = max(population, key=lambda s: s.fitness)
+            if best.code:
+                reference = f"""
+For reference, here is a working algorithm with correct structure and format:
+```python
+{best.code}
+```
+Your new algorithm must use a DIFFERENT strategy from the above. Use it only as a reference for correct code structure and formatting.
+"""
+        
+        instruction = "Generate a new algorithm that is different from the algorithms you have tried before."
+        
+        return f"{task_prompt}\n\n{history}\n{reference}\n{instruction}\n\n{problem.format_prompt}"
 
 
 # Factory dictionary for easy operator instantiation
