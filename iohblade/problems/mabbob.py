@@ -138,9 +138,8 @@ Give an excellent and novel heuristic algorithm to solve this task and also give
         auc_std = 0
         code = solution.code
         algorithm_name = solution.name
-        safe_globals = {"np": np}
-        local_env = {}
-        exec(code, safe_globals, local_env)
+        namespace = {"np": np}
+        exec(code, namespace)
 
         algorithm = None
 
@@ -149,7 +148,7 @@ Give an excellent and novel heuristic algorithm to solve this task and also give
             l2_temp = aoc_logger(100, upper=1e2, triggers=[ioh_logger.trigger.ALWAYS])
             problem = get_problem(11, 1, 2)
             problem.attach_logger(l2_temp)
-            algorithm = local_env[algorithm_name](budget=100, dim=2)
+            algorithm = namespace[algorithm_name](budget=100, dim=2)
             algorithm(problem)
         except OverBudgetException:
             pass
@@ -183,7 +182,7 @@ Give an excellent and novel heuristic algorithm to solve this task and also give
                     f_new.attach_logger(l2)
 
                 try:
-                    algorithm = local_env[algorithm_name](budget=budget, dim=dim)
+                    algorithm = namespace[algorithm_name](budget=budget, dim=dim)
                     algorithm(f_new)
                 except OverBudgetException:
                     aucs.append(0)

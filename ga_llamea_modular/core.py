@@ -116,8 +116,9 @@ class GA_LLaMEA:
         n_offspring: int = 16,
         elitism: bool = True,
         discount: float = 0.9,
-        tau_max: float = 1.0,
-        reward_variance: float = 1.0,
+        tau_max: float = 0.1,
+        prior_variance: float = 0.25,
+        reward_variance: float = 0.5,
         **kwargs,
     ):
         """Initialize GA-LLAMEA.
@@ -149,9 +150,16 @@ class GA_LLaMEA:
                      Lower = faster adaptation to changing reward distributions.
                      0.9 is a good default (10% decay per observation).
             
-            tau_max: Maximum posterior uncertainty for D-TS. Caps exploration.
+            tau_max: Maximum posterior std dev for D-TS. Caps exploration.
+                     Calibrated for binary rewards {-0.5, 0.0, 1.0} following the
+                     D-TS paper: tau_max ~ mu_max/3 where mu_max ~ 0.2-0.4.
+                     Default 0.1 balances exploration vs exploitation.
             
-            reward_variance: Expected variance of rewards. Used in D-TS updates.
+            prior_variance: Prior variance for arm rewards. Calibrated for binary
+                           reward scale. Default 0.25.
+            
+            reward_variance: Expected variance of rewards. Calibrated for binary
+                            reward scale {-0.5, 0.0, 1.0}. Default 0.5.
             
             **kwargs: Additional arguments stored but not used directly.
         """
@@ -170,13 +178,19 @@ class GA_LLaMEA:
             self._solution_class = DefaultSolution
 
         # Initialize D-TS bandit with three operators:
-        #   simplify  - simplify and improve a parent (LLAMEA Prompt5 style)
-        #   crossover - combine two parents (GA-LLAMEA unique)
+        #   simplify   - simplify and improve a parent (LLAMEA Prompt5 style)
+        #   crossover  - guided concept transfer between two parents (GA-LLAMEA unique)
         #   random_new - generate a completely new algorithm
+        #
+        # Parameters calibrated for binary rewards {-0.5, 0.0, 1.0}:
+        #   tau_max=0.1: ~mu_max/3 per D-TS paper (Section 7.3)
+        #   prior_variance=0.25: moderate prior uncertainty for [-0.5, 1.0] range
+        #   reward_variance=0.5: expected variance of binary-ish rewards
         self.bandit = DiscountedThompsonSampler(
             arm_names=["simplify", "crossover", "random_new"],
             discount=discount,
             tau_max=tau_max,
+            prior_variance=prior_variance,
             reward_variance=reward_variance,
         )
 
@@ -351,8 +365,8 @@ class GA_LLaMEA:
                 if child.error:
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
-                    # Failed - punish operator
-                    self.bandit.update(operator_name, 0.0)
+                    # Failed — penalize operator with is_valid=False (-0.5)
+                    self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
                     continue
 
                 # Validate code before expensive subprocess evaluation
@@ -361,7 +375,8 @@ class GA_LLaMEA:
                     child.error = f"Validation failed: {validation_error}"
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
-                    self.bandit.update(operator_name, 0.0)
+                    # Validation failure — penalize operator with is_valid=False (-0.5)
+                    self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
                     print(f"Code validation failed for {child.name}: {validation_error}")
                     continue
 
@@ -379,18 +394,20 @@ class GA_LLaMEA:
                     offspring.append(child)
 
                     # Compute reward against parent fitness (per-operator baseline)
-                    reward = calculate_reward(baseline_fitness, child.fitness, True)
+                    reward = calculate_reward(baseline_fitness, child.fitness, is_valid=True)
                     self.bandit.update(operator_name, reward)
                     child.metadata["reward"] = reward
                     child.metadata["baseline_fitness"] = baseline_fitness
                 else:
-                    self.bandit.update(operator_name, 0.0)
-                    child.metadata["reward"] = 0.0
+                    # Evaluation failure (runtime error, timeout, etc.) — penalize with is_valid=False (-0.5)
+                    failure_reward = calculate_reward(0, 0, is_valid=False)
+                    self.bandit.update(operator_name, failure_reward)
+                    child.metadata["reward"] = failure_reward
                     print(f"Evaluation failed for {child.name}: {child.error}")
 
             except Exception as e:
-                # Failed - punish operator
-                self.bandit.update(operator_name, 0.0)
+                # Unexpected failure — penalize operator with is_valid=False (-0.5)
+                self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
                 continue
                 
         return offspring

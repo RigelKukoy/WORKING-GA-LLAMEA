@@ -43,7 +43,7 @@ class GA_LLaMEA_Method(Method):
         n_offspring: int = 16,
         elitism: bool = True,
         discount: float = 0.9,
-        tau_max: float = 1.0,
+        tau_max: float = 0.1,
         **kwargs,
     ):
         """
@@ -57,7 +57,8 @@ class GA_LLaMEA_Method(Method):
             n_offspring: Offspring generated per generation (λ). Default 16.
             elitism: Selection strategy. True = (μ+λ), False = (μ,λ)
             discount: D-TS discount factor γ ∈ (0, 1]. Default 0.9.
-            tau_max: Maximum posterior uncertainty for D-TS.
+            tau_max: Maximum posterior std dev for D-TS. Calibrated for binary
+                     rewards per D-TS paper (tau_max ~ mu_max/3). Default 0.1.
             **kwargs: Additional arguments passed to GA_LLaMEA.
         """
         super().__init__(llm, budget, name)

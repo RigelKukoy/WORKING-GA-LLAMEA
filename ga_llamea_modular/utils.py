@@ -20,44 +20,48 @@ from typing import Optional, Any, Tuple, Type
 
 
 def calculate_reward(parent_score: float, child_score: float, is_valid: bool) -> float:
-    """Calculate normalized reward for bandit update.
+    """Calculate binary reward for bandit update.
     
-    The reward function is designed to encourage improvement over the
-    *parent* (not the global best), giving the bandit a meaningful signal:
-    - Invalid solutions (errors) get 0 reward
-    - Solutions worse than or equal to parent get 0 reward
-    - Solutions better than parent get reward normalized to [0, 1]
+    Uses a binary reward signal with failure penalty, designed for robust
+    learning with Discounted Thompson Sampling at small sample sizes
+    (budget=50-100). Binary rewards produce large, distinguishable signals
+    between arms (~0.3-0.5 mean difference) compared to continuous rewards
+    (~0.002-0.003), enabling the D-TS bandit to learn effectively even
+    with discount=0.9 reducing effective samples to 2-4 per arm.
     
-    The normalization ensures the bandit receives clean signals regardless
-    of the absolute fitness scale.
+    The failure penalty (-0.5) is critical: it lets the bandit distinguish
+    operators that produce broken code (e.g., random_new with 40% failure)
+    from operators that produce valid but non-improving code (e.g., crossover).
     
     Args:
         parent_score: Baseline fitness of the parent (or median for random_new).
                       This should be the *parent's* fitness, NOT the global best.
         child_score: New solution's fitness after evaluation.
-        is_valid: Whether the solution is valid (no errors during evaluation)
+        is_valid: Whether the solution is valid (no errors during evaluation).
+                  Pass False for code extraction failures, validation failures,
+                  evaluation errors, and timeouts.
         
     Returns:
-        float: Reward value in [0.0, 1.0]
+        float: Reward value:
+            +1.0  if valid and improves over parent
+             0.0  if valid but no improvement
+            -0.5  if invalid (error, timeout, etc.)
         
     Example:
-        >>> calculate_reward(0.5, 0.7, True)   # Improvement over parent
-        0.4
-        >>> calculate_reward(0.7, 0.5, True)   # Worse than parent
+        >>> calculate_reward(0.5, 0.7, True)    # Improvement
+        1.0
+        >>> calculate_reward(0.7, 0.5, True)    # No improvement
         0.0
-        >>> calculate_reward(0.5, 0.9, False)  # Invalid
-        0.0
-        >>> calculate_reward(0.0, 0.3, True)   # Parent had 0 fitness
-        0.3
+        >>> calculate_reward(0.5, 0.9, False)   # Invalid
+        -0.5
+        >>> calculate_reward(0.0, 0.3, True)    # Improvement from 0
+        1.0
     """
     if not is_valid:
-        return 0.0  # Invalid code gets zero reward
-    if child_score <= parent_score:
-        return 0.0  # No improvement over parent
-    # Normalized improvement as a fraction, capped at 1.0
-    if parent_score <= 0:
-        return min(1.0, child_score)
-    return min(1.0, (child_score - parent_score) / max(0.01, parent_score))
+        return -0.5  # Penalize budget-wasting failures
+    if child_score > parent_score:
+        return 1.0   # Binary: any improvement counts equally
+    return 0.0       # Valid but no improvement
 
 
 def extract_code(response: str) -> Optional[str]:

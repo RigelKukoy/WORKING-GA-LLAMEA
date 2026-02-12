@@ -18,7 +18,7 @@ if __name__ == "__main__":
     llm = Gemini_LLM(api_key, ai_model)
     budget = 100 
     
-    num_runs = 5
+    num_runs = 10
     # Generates seeds starting from 4: [4, 5, 6, ...]
     seeds = [0 + i for i in range(num_runs)]
 
@@ -52,16 +52,16 @@ if __name__ == "__main__":
         elitism=True
     )
 
-    # 3. GA-LLAMEA Baseline
+    # 3. GA-LLAMEA Improved (concept-level crossover, binary rewards, calibrated D-TS)
     GA_LLaMEA_Baseline = GA_LLaMEA_Method(
         llm, 
         budget=budget, 
-        name="GA-LLAMEA-Baseline", 
+        name="GA-LLAMEA-Improved", 
         n_parents=4, 
         n_offspring=8, 
         elitism=True, 
         discount=0.9, 
-        tau_max=0.2
+        tau_max=0.1
     )
 
     # 4. EoH
