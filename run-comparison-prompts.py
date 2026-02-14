@@ -14,7 +14,7 @@ if __name__ == "__main__":
     load_dotenv()
 
     api_key = os.getenv("GEMINI_API_KEY")
-    ai_model = "gemini-2.0-flash"
+    ai_model = "gemini-2.5-flash"
     llm = Gemini_LLM(api_key, ai_model)
     budget = 100 
     
