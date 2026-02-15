@@ -16,9 +16,9 @@ if __name__ == "__main__":
     api_key = os.getenv("GEMINI_API_KEY")
     ai_model = "gemini-2.0-flash"
     llm = Gemini_LLM(api_key, ai_model)
-    budget = 100 
+    budget = 30
     
-    num_runs = 10
+    num_runs = 1
     # Generates seeds starting from 4: [4, 5, 6, ...]
     seeds = [0 + i for i in range(num_runs)]
 

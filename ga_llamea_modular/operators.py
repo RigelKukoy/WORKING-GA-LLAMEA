@@ -268,6 +268,103 @@ Use only numpy. Keep it simple and functional."""
         return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
 
 
+class WeaknessRefinementOperator(BaseOperator):
+    """Weakness refinement operator: Diagnose and fix instance-specific failures.
+    
+    This operator takes a parent algorithm and shows its per-instance performance
+    breakdown (AOCC scores). It asks the LLM to analyze what types of optimization
+    landscapes cause failures and redesign the algorithm to be more robust.
+    
+    This addresses the key limitation of simplify and crossover: those operators
+    only see an aggregate fitness number, so the LLM cannot reason about *where*
+    the algorithm actually fails.
+    
+    When to use:
+        - When algorithms perform well on average but poorly on some instances
+        - To improve robustness across diverse problem landscapes
+        - When you want to fix specific weaknesses rather than general refinement
+    
+    Prompt structure:
+        1. Task description + example
+        2. Population history
+        3. Parent code + fitness + per-instance AOCC breakdown
+        4. "Analyze failures and redesign for robustness"
+        5. Output format
+    """
+    
+    @property
+    def name(self) -> str:
+        return "refine_weakness"
+    
+    def build_prompt(
+        self,
+        problem: ProblemProtocol,
+        population: List[Any],
+        parent: Any = None,
+        parent2: Any = None,
+        **kwargs
+    ) -> str:
+        """Build prompt for weakness refinement operator.
+        
+        Args:
+            problem: Optimization problem
+            population: Current population
+            parent: Parent solution to refine (required)
+            parent2: Not used
+            
+        Returns:
+            Complete weakness refinement prompt
+        """
+        if parent is None:
+            raise ValueError("Weakness refinement requires a parent solution")
+        
+        task_prompt = self._get_task_prompt(problem)
+        history = self._get_population_history(population)
+        
+        # Extract per-instance AOCC scores from parent's metadata
+        aucs = parent.metadata.get("aucs", [])
+        
+        # Build per-instance performance breakdown
+        performance_breakdown = ""
+        if aucs:
+            # Sort instances by performance (worst to best)
+            sorted_instances = sorted(enumerate(aucs), key=lambda x: x[1])
+            
+            # Label bottom quartile as WEAK, top quartile as STRONG
+            n_instances = len(sorted_instances)
+            weak_threshold = n_instances // 4
+            strong_threshold = n_instances - (n_instances // 4)
+            
+            performance_breakdown = "Per-instance performance (AOCC scores, sorted worst to best):\n"
+            for rank, (instance_idx, score) in enumerate(sorted_instances):
+                if rank < weak_threshold:
+                    label = " (WEAK)"
+                elif rank >= strong_threshold:
+                    label = " (STRONG)"
+                else:
+                    label = ""
+                performance_breakdown += f"- Instance {instance_idx}: {score:.4f}{label}\n"
+        else:
+            # Fallback if no AUC data available
+            performance_breakdown = "Per-instance performance data not available.\n"
+        
+        algo_details = f"""
+Algorithm to improve (mean AOCC: {parent.fitness:.4f}):
+```python
+{parent.code}
+```
+
+{performance_breakdown}
+"""
+        
+        instruction = """This algorithm performs well on average but poorly on some problem instances.
+Analyze what types of optimization landscapes or function properties might
+cause these failures. Redesign the algorithm to be more robust across all
+instances while maintaining its strengths on the ones it already handles well."""
+        
+        return f"{task_prompt}\n\n{history}\n{algo_details}\n{instruction}\n\n{problem.format_prompt}"
+
+
 class RandomNewOperator(BaseOperator):
     """Random new operator: Generate a completely new algorithm.
     
@@ -277,9 +374,9 @@ class RandomNewOperator(BaseOperator):
     
     To reduce the high failure rate (~40%) from structural errors (missing
     __call__, wrong return types, array shape mismatches), the prompt includes
-    the best existing algorithm's code as a structural reference when available.
-    The LLM is explicitly told to use a DIFFERENT strategy — the reference is
-    only for correct code structure and formatting.
+    a minimal structural skeleton. The LLM is explicitly told to use a DIFFERENT
+    strategy from the algorithms listed in history — the skeleton is only for
+    correct code structure and formatting.
     
     When to use:
         - To escape local optima
@@ -289,7 +386,7 @@ class RandomNewOperator(BaseOperator):
     Prompt structure:
         1. Task description + example
         2. Population history (to avoid repetition)
-        3. Working reference code for structure (when available)
+        3. Minimal structural skeleton (for correct structure)
         4. "Generate a completely new approach"
         5. Output format
     """
@@ -328,17 +425,31 @@ class RandomNewOperator(BaseOperator):
             # Avoid extra newlines when instruction and history are empty
             return f"{task_prompt}\n\n{problem.format_prompt}"
         
-        # Include best solution as structural reference to reduce -inf failures
-        reference = ""
-        if population:
-            best = max(population, key=lambda s: s.fitness)
-            if best.code:
-                reference = f"""
-For reference, here is a working algorithm with correct structure and format:
+        # Minimal skeleton for correct structure (no algorithmic strategy revealed)
+        reference = """
+For correct code structure, follow this template:
 ```python
-{best.code}
+import numpy as np
+
+class YourAlgorithm:
+    def __init__(self, budget=10000, dim=10):
+        self.budget = budget
+        self.dim = dim
+
+    def __call__(self, func):
+        lb = func.bounds.lb  # lower bounds (numpy array)
+        ub = func.bounds.ub  # upper bounds (numpy array)
+        f_opt = np.inf
+        x_opt = None
+        eval_count = 0
+
+        # Your optimization logic here
+        # Use func(x) to evaluate a candidate x (numpy array of shape (dim,))
+        # Track eval_count and stop when eval_count >= self.budget
+
+        return f_opt, x_opt
 ```
-Your new algorithm must use a DIFFERENT strategy from the above. Use it only as a reference for correct code structure and formatting.
+Use a DIFFERENT strategy from the algorithms listed above. This template is only for correct structure and formatting.
 """
         
         instruction = "Generate a new algorithm that is different from the algorithms you have tried before."
@@ -351,6 +462,7 @@ OPERATORS = {
     "simplify": SimplifyOperator,
     "crossover": CrossoverOperator,
     "random_new": RandomNewOperator,
+    "refine_weakness": WeaknessRefinementOperator,
 }
 
 
@@ -358,7 +470,7 @@ def get_operator(name: str) -> BaseOperator:
     """Factory function to get an operator instance by name.
     
     Args:
-        name: Operator name ("simplify", "crossover", or "random_new")
+        name: Operator name ("simplify", "crossover", "random_new", or "refine_weakness")
         
     Returns:
         Operator instance

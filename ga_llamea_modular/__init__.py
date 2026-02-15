@@ -37,7 +37,7 @@ from .core import GA_LLaMEA
 from .bandit import DiscountedThompsonSampler, ArmState
 
 # Operators
-from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator
+from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator, WeaknessRefinementOperator
 
 # Protocol interfaces
 from .interfaces import LLMProtocol, SolutionProtocol, ProblemProtocol
@@ -56,6 +56,7 @@ __all__ = [
     "SimplifyOperator",
     "CrossoverOperator", 
     "RandomNewOperator",
+    "WeaknessRefinementOperator",
     # Interfaces
     "LLMProtocol",
     "SolutionProtocol",

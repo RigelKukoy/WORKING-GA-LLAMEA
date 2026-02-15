@@ -61,7 +61,7 @@ from typing import Any, List, Optional, Tuple, Type
 
 from .bandit import DiscountedThompsonSampler
 from .interfaces import LLMProtocol, ProblemProtocol, SolutionProtocol
-from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator
+from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator, WeaknessRefinementOperator
 from .utils import (
     calculate_reward,
     extract_code,
@@ -177,17 +177,18 @@ class GA_LLaMEA:
         else:
             self._solution_class = DefaultSolution
 
-        # Initialize D-TS bandit with three operators:
-        #   simplify   - simplify and improve a parent (LLAMEA Prompt5 style)
-        #   crossover  - guided concept transfer between two parents (GA-LLAMEA unique)
-        #   random_new - generate a completely new algorithm
+        # Initialize D-TS bandit with four operators:
+        #   simplify        - simplify and improve a parent (LLAMEA Prompt5 style)
+        #   crossover       - guided concept transfer between two parents (GA-LLAMEA unique)
+        #   random_new      - generate a completely new algorithm
+        #   refine_weakness - diagnose instance-specific failures and redesign for robustness
         #
         # Parameters calibrated for binary rewards {-0.5, 0.0, 1.0}:
         #   tau_max=0.1: ~mu_max/3 per D-TS paper (Section 7.3)
         #   prior_variance=0.25: moderate prior uncertainty for [-0.5, 1.0] range
         #   reward_variance=0.5: expected variance of binary-ish rewards
         self.bandit = DiscountedThompsonSampler(
-            arm_names=["simplify", "crossover", "random_new"],
+            arm_names=["simplify", "crossover", "random_new", "refine_weakness"],
             discount=discount,
             tau_max=tau_max,
             prior_variance=prior_variance,
@@ -198,6 +199,7 @@ class GA_LLaMEA:
         self._simplify = SimplifyOperator()
         self._crossover = CrossoverOperator()
         self._random_new = RandomNewOperator()
+        self._refine_weakness = WeaknessRefinementOperator()
 
         # State
         self.population: List[Any] = []
@@ -342,6 +344,11 @@ class GA_LLaMEA:
                     parent_ids = [parent1.id, parent2.id]
                     # Crossover child should beat the better parent
                     baseline_fitness = max(parent1.fitness, parent2.fitness)
+                elif operator_name == "refine_weakness":
+                    parent = self._select_parent()
+                    prompt = self._refine_weakness.build_prompt(problem, self.population, parent)
+                    parent_ids = [parent.id]
+                    baseline_fitness = parent.fitness
                 else:  # random_new
                     prompt = self._random_new.build_prompt(problem, self.population)
                     parent_ids = []
