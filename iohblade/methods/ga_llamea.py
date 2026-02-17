@@ -6,10 +6,11 @@ This module provides a wrapper around the ga_llamea_modular.GA_LLaMEA class
 to integrate it seamlessly with BLADE's Method interface and experiment system.
 
 GA-LLAMEA extends LLaMEA by using a Discounted Thompson Sampling (D-TS) bandit
-to adaptively select between three genetic operators:
-    - Mutation: Refine a single parent algorithm
+to adaptively select between four genetic operators:
+    - Simplify: Simplify and improve a single parent algorithm
     - Crossover: Combine two parent algorithms
-    - Random New: Generate a completely new algorithm
+    - Random New: Generate a completely new algorithm (minimal skeleton)
+    - Refine Weakness: Improve robustness using per-instance performance data
 
 The bandit learns which operator works best over time, adapting to non-stationary
 reward distributions through exponential discounting.

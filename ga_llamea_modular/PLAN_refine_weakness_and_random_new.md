@@ -138,7 +138,7 @@ No changes needed to `bandit.py` (already supports arbitrary arm count) or `util
 
 ## Implementation Checklist
 
-- [ ] Implement `WeaknessRefinementOperator` in `operators.py` (shows parent code + per-instance AUC scores, asks LLM to diagnose failures and redesign for robustness)
-- [ ] Modify `RandomNewOperator` in `operators.py` (replace full best-solution code reference with minimal structural skeleton)
-- [ ] Update `OPERATORS` dict and `get_operator()` in `operators.py` to include the new operator
-- [ ] Update `core.py`: add `refine_weakness` to bandit `arm_names`, instantiate `WeaknessRefinementOperator`, add routing logic in `_generate_offspring`
+- [x] Implement `WeaknessRefinementOperator` in `operators.py` (shows parent code + per-instance AUC scores, asks LLM to diagnose failures and redesign for robustness)
+- [x] Modify `RandomNewOperator` in `operators.py` (replace full best-solution code reference with minimal structural skeleton)
+- [x] Update `OPERATORS` dict and `get_operator()` in `operators.py` to include the new operator
+- [x] Update `core.py`: add `refine_weakness` to bandit `arm_names`, instantiate `WeaknessRefinementOperator`, add routing logic in `_generate_offspring`

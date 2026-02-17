@@ -10,7 +10,7 @@ Package Structure:
     ├── __init__.py          # This file - Package exports
     ├── README.md            # Comprehensive integration guide
     ├── bandit.py            # Discounted Thompson Sampling (D-TS) bandit
-    ├── operators.py         # Genetic operators (refine, simplify, crossover, random_new)
+    ├── operators.py         # Genetic operators (simplify, crossover, random_new, refine_weakness)
     ├── core.py              # Main GA_LLaMEA class
     ├── interfaces.py        # Protocol definitions for BLADE compatibility
     └── utils.py             # Helper functions
@@ -37,7 +37,7 @@ from .core import GA_LLaMEA
 from .bandit import DiscountedThompsonSampler, ArmState
 
 # Operators
-from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator
+from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator, WeaknessRefinementOperator
 
 # Protocol interfaces
 from .interfaces import LLMProtocol, SolutionProtocol, ProblemProtocol
@@ -56,6 +56,7 @@ __all__ = [
     "SimplifyOperator",
     "CrossoverOperator", 
     "RandomNewOperator",
+    "WeaknessRefinementOperator",
     # Interfaces
     "LLMProtocol",
     "SolutionProtocol",

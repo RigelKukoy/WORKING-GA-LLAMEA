@@ -2,13 +2,16 @@
 Genetic Operators for GA-LLAMEA
 ===============================
 
-This module implements the three genetic operators used in GA-LLAMEA:
+This module implements the four genetic operators used in GA-LLAMEA:
     1. SimplifyOperator: Simplify and improve a parent algorithm
     2. CrossoverOperator: Combine two parent algorithms
-    3. RandomNewOperator: Generate a completely new algorithm
+    3. RandomNewOperator: Generate a completely new algorithm (minimal skeleton)
+    4. WeaknessRefinementOperator: Improve robustness using per-instance AOCC data
     
 The simplify operator matches LLAMEA's proven Prompt5 instructions
 verbatim, while crossover is GA-LLAMEA's unique addition for hybridization.
+The weakness refinement operator uses per-instance performance data to guide
+the LLM toward more robust algorithm designs.
 
 OPERATOR DESIGN PHILOSOPHY:
     Each operator generates a prompt that is sent to the LLM. The prompt
@@ -328,17 +331,35 @@ class RandomNewOperator(BaseOperator):
             # Avoid extra newlines when instruction and history are empty
             return f"{task_prompt}\n\n{problem.format_prompt}"
         
-        # Include best solution as structural reference to reduce -inf failures
+        # Provide a minimal structural skeleton to reduce -inf failures from
+        # formatting errors, WITHOUT revealing any algorithmic strategy.
+        # This prevents DE monoculture by not showing the best solution's code.
         reference = ""
         if population:
-            best = max(population, key=lambda s: s.fitness)
-            if best.code:
-                reference = f"""
-For reference, here is a working algorithm with correct structure and format:
+            reference = """
+For correct code structure, follow this template:
 ```python
-{best.code}
+import numpy as np
+
+class YourAlgorithm:
+    def __init__(self, budget=10000, dim=10):
+        self.budget = budget
+        self.dim = dim
+
+    def __call__(self, func):
+        lb = func.bounds.lb  # lower bounds (numpy array)
+        ub = func.bounds.ub  # upper bounds (numpy array)
+        f_opt = np.inf
+        x_opt = None
+        eval_count = 0
+
+        # Your optimization logic here
+        # Use func(x) to evaluate a candidate x (numpy array of shape (dim,))
+        # Track eval_count and stop when eval_count >= self.budget
+
+        return f_opt, x_opt
 ```
-Your new algorithm must use a DIFFERENT strategy from the above. Use it only as a reference for correct code structure and formatting.
+Use a DIFFERENT strategy from the algorithms listed above. This template is only for correct structure and formatting.
 """
         
         instruction = "Generate a new algorithm that is different from the algorithms you have tried before."
@@ -346,11 +367,108 @@ Your new algorithm must use a DIFFERENT strategy from the above. Use it only as 
         return f"{task_prompt}\n\n{history}\n{reference}\n{instruction}\n\n{problem.format_prompt}"
 
 
+class WeaknessRefinementOperator(BaseOperator):
+    """Weakness refinement operator: Improve robustness across problem instances.
+    
+    This operator shows the parent algorithm's code alongside its **per-instance
+    AOCC scores** (already stored in ``metadata["aucs"]``), sorted worst-to-best,
+    with weak instances labeled.  It asks the LLM to analyse what optimisation
+    landscapes cause failures and redesign the algorithm for robustness.
+    
+    The bottom quartile of instances is labelled WEAK and the top quartile
+    STRONG, giving the LLM concrete evidence about where the algorithm
+    underperforms.
+    
+    When to use:
+        - When the population has good average fitness but high variance
+        - To break through plateaus caused by algorithms that overfit to
+          certain function types
+        - To encourage robustness over specialisation
+    
+    Prompt structure:
+        1. Task description + example
+        2. Population history
+        3. Parent code + per-instance AOCC scores with WEAK/STRONG labels
+        4. Instruction to diagnose failures and redesign for robustness
+        5. Output format
+    """
+    
+    @property
+    def name(self) -> str:
+        return "refine_weakness"
+    
+    def build_prompt(
+        self,
+        problem: ProblemProtocol,
+        population: List[Any],
+        parent: Any = None,
+        parent2: Any = None,
+        **kwargs
+    ) -> str:
+        """Build prompt for weakness refinement operator.
+        
+        Args:
+            problem: Optimization problem
+            population: Current population
+            parent: Parent solution to refine (required, must have metadata["aucs"])
+            parent2: Not used
+            
+        Returns:
+            Complete weakness refinement prompt
+        """
+        if parent is None:
+            raise ValueError("Weakness refinement requires a parent solution")
+        
+        task_prompt = self._get_task_prompt(problem)
+        history = self._get_population_history(population)
+        
+        # Build per-instance performance breakdown
+        aucs = parent.metadata.get("aucs", [])
+        if aucs:
+            # Sort by score and label bottom/top quartile
+            indexed_aucs = sorted(enumerate(aucs), key=lambda x: x[1])
+            n = len(indexed_aucs)
+            weak_cutoff = n // 4
+            strong_cutoff = n - n // 4
+            
+            perf_lines = []
+            for rank, (idx, score) in enumerate(indexed_aucs):
+                if rank < weak_cutoff:
+                    label = " (WEAK)"
+                elif rank >= strong_cutoff:
+                    label = " (STRONG)"
+                else:
+                    label = ""
+                perf_lines.append(f"- Instance {idx}: {score:.4f}{label}")
+            
+            perf_section = "\n".join(perf_lines)
+        else:
+            perf_section = "Per-instance data not available."
+        
+        algo_details = f"""
+Algorithm to improve (mean AOCC: {parent.fitness:.4f}):
+```python
+{parent.code}
+```
+
+Per-instance performance (AOCC scores, sorted worst to best):
+{perf_section}
+"""
+        
+        instruction = """This algorithm performs well on average but poorly on some problem instances.
+Analyze what types of optimization landscapes or function properties might
+cause these failures. Redesign the algorithm to be more robust across all
+instances while maintaining its strengths on the ones it already handles well."""
+        
+        return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
+
+
 # Factory dictionary for easy operator instantiation
 OPERATORS = {
     "simplify": SimplifyOperator,
     "crossover": CrossoverOperator,
     "random_new": RandomNewOperator,
+    "refine_weakness": WeaknessRefinementOperator,
 }
 
 
