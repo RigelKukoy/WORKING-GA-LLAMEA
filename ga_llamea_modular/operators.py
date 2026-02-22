@@ -268,6 +268,72 @@ Use only numpy. Keep it simple and functional."""
         return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
 
 
+class WeaknessRefinementOperator(BaseOperator):
+    """Refine Weakness operator: Show a parent's performance per instance and redesign for robustness.
+    
+    This operator shows the parent algorithm's code alongside its per-instance
+    AOCC scores, sorted worst-to-best. It labels the bottom quartile as WEAK
+    and the top quartile as STRONG, asking the LLM to diagnose what types of
+    optimization landscapes cause failures and redesign the algorithm.
+    """
+    
+    @property
+    def name(self) -> str:
+        return "refine_weakness"
+        
+    def build_prompt(
+        self,
+        problem: ProblemProtocol,
+        population: List[Any],
+        parent: Any = None,
+        parent2: Any = None,
+        **kwargs
+    ) -> str:
+        if parent is None:
+            raise ValueError("refine_weakness requires a parent solution")
+            
+        task_prompt = self._get_task_prompt(problem)
+        history = self._get_population_history(population)
+        
+        # Get and format AUCs
+        aucs = parent.metadata.get("aucs", [])
+        auc_text = ""
+        if aucs:
+            # Create a list of (index, auc) tuples to keep track of original instance indices
+            indexed_aucs = list(enumerate(aucs))
+            # Sort by AUC ascending (worst to best)
+            sorted_aucs = sorted(indexed_aucs, key=lambda x: x[1])
+            
+            # Label bottom 25% as WEAK, top 25% as STRONG
+            n_instances = len(sorted_aucs)
+            q1 = n_instances // 4
+            q3 = n_instances - (n_instances // 4)
+            
+            auc_lines = []
+            for i, (orig_idx, auc_val) in enumerate(sorted_aucs):
+                label = ""
+                if i < q1:
+                    label = " (WEAK)"
+                elif i >= q3:
+                    label = " (STRONG)"
+                auc_lines.append(f"- Instance {orig_idx}: {auc_val:.4f}{label}")
+            
+            auc_text = "\nPer-instance performance (AOCC scores, sorted worst to best):\n" + "\n".join(auc_lines) + "\n"
+        
+        algo_details = f"""
+Algorithm to improve (mean AOCC: {parent.fitness:.4f}):
+```python
+{parent.code}
+```{auc_text}
+This algorithm performs well on average but poorly on some problem instances.
+Analyze what types of optimization landscapes or function properties might
+cause these failures. Redesign the algorithm to be more robust across all
+instances while maintaining its strengths on the ones it already handles well.
+"""
+        
+        return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{problem.format_prompt}"
+
+
 class RandomNewOperator(BaseOperator):
     """Random new operator: Generate a completely new algorithm.
     
@@ -328,17 +394,33 @@ class RandomNewOperator(BaseOperator):
             # Avoid extra newlines when instruction and history are empty
             return f"{task_prompt}\n\n{problem.format_prompt}"
         
-        # Include best solution as structural reference to reduce -inf failures
+        # Use a minimal structural skeleton as reference
         reference = ""
         if population:
-            best = max(population, key=lambda s: s.fitness)
-            if best.code:
-                reference = f"""
-For reference, here is a working algorithm with correct structure and format:
+            reference = """
+For correct code structure, follow this template:
 ```python
-{best.code}
+import numpy as np
+
+class YourAlgorithm:
+    def __init__(self, budget=10000, dim=10):
+        self.budget = budget
+        self.dim = dim
+
+    def __call__(self, func):
+        lb = func.bounds.lb  # lower bounds (numpy array)
+        ub = func.bounds.ub  # upper bounds (numpy array)
+        f_opt = np.inf
+        x_opt = None
+        eval_count = 0
+
+        # Your optimization logic here
+        # Use func(x) to evaluate a candidate x (numpy array of shape (dim,))
+        # Track eval_count and stop when eval_count >= self.budget
+
+        return f_opt, x_opt
 ```
-Your new algorithm must use a DIFFERENT strategy from the above. Use it only as a reference for correct code structure and formatting.
+Use a DIFFERENT strategy from the algorithms listed above. This template is only for correct structure and formatting.
 """
         
         instruction = "Generate a new algorithm that is different from the algorithms you have tried before."
@@ -351,6 +433,7 @@ OPERATORS = {
     "simplify": SimplifyOperator,
     "crossover": CrossoverOperator,
     "random_new": RandomNewOperator,
+    "refine_weakness": WeaknessRefinementOperator,
 }
 
 
