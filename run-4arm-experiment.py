@@ -27,7 +27,7 @@ if __name__ == "__main__":
     if not api_key:
         raise ValueError("GEMINI_API_KEY not found in environment. Please set it in .env file.")
     
-    ai_model = "gemini-2.0-flash"
+    ai_model = "gemini-3-flash-preview"
     llm = Gemini_LLM(api_key, ai_model)
     
     # Experiment Configuration
@@ -36,12 +36,30 @@ if __name__ == "__main__":
     seeds = [0 + i for i in range(num_runs)]  # Seeds: [0, 1, 2, ..., 9]
 
     print("=" * 80)
-    print("GA-LLAMEA 4-Arm Experiment")
+    print("GA-LLAMEA 3-Arm vs 4-Arm Experiment")
     print("=" * 80)
     print(f"Budget: {budget} LLM queries per run")
     print(f"Runs: {num_runs}")
     print(f"Seeds: {seeds}")
     print(f"LLM: {ai_model}")
+    print()
+
+    # GA-LLAMEA with 3 arms (baseline)
+    # Uses: simplify, crossover, random_new
+    GA_LLaMEA_3arm = GA_LLaMEA(
+        llm=llm,
+        budget=budget,
+        solution_class=Solution,
+        name="GA-LLAMEA-3arm",
+        n_parents=4,
+        n_offspring=8,
+        elitism=True,
+        discount=0.9,
+        tau_max=0.1,
+        arm_names=["simplify", "crossover", "random_new"]  # 3-arm config
+    )
+    print("✓ Configured GA-LLAMEA-3arm (baseline)")
+    print("  Arms: simplify, crossover, random_new")
     print()
 
     # GA-LLAMEA with 4 arms (new)
@@ -62,11 +80,11 @@ if __name__ == "__main__":
     print("  Arms: simplify, crossover, random_new, refine_weakness")
     print()
 
-    methods = [GA_LLaMEA_4arm]
+    methods = [GA_LLaMEA_3arm, GA_LLaMEA_4arm]
     
     # Generate a unique directory for this experiment run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_dir = f"results/4ARM-ONLY_{timestamp}"
+    experiment_dir = f"results/3ARM-vs-4ARM_{timestamp}"
     logger = ExperimentLogger(experiment_dir)
     
     print(f"Results will be saved to: {experiment_dir}")

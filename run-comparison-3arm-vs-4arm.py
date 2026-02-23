@@ -25,6 +25,7 @@ from iohblade.problems import MA_BBOB
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import numpy as np
 
 # Import GA_LLaMEA from the modular package
 # NOTE: This assumes ga_llamea_modular is in the Python path
@@ -40,13 +41,14 @@ if __name__ == "__main__":
     if not api_key:
         raise ValueError("GEMINI_API_KEY not found in environment. Please set it in .env file.")
     
-    ai_model = "gemini-2.0-flash"
+    ai_model = "gemini-3-flash-preview"
+
     llm = Gemini_LLM(api_key, ai_model)
     
     # Experiment Configuration
     budget = 100  # LLM queries per run (increased from 20 for meaningful evolution)
-    num_runs = 10  # Multiple runs for statistical significance
-    seeds = [0 + i for i in range(num_runs)]  # Seeds: [0, 1, 2, ..., 9]
+    num_runs = 5  # Multiple runs for statistical significance
+    seeds = [0 + i for i in range(num_runs)]  # Seeds: [0, 1, 2, 3, 4]
 
     print("=" * 80)
     print("GA-LLAMEA 3-Arm vs 4-Arm Comparison Experiment")
@@ -115,11 +117,13 @@ if __name__ == "__main__":
         runs=num_runs,
         seeds=seeds,
         dims=[5],
-        budget_factor=2000,
+        budget_factor=300,
         budget=budget,
-        eval_timeout=300,
+        eval_timeout=500,
         show_stdout=True,
-        exp_logger=logger
+        exp_logger=logger,
+        training_instances=list(range(0, 20)),
+        test_instances=list(range(20, 70))
     )
     experiment()
 
@@ -146,13 +150,12 @@ if __name__ == "__main__":
             print("⚠ No experiment data found, skipping IOH generation.")
         else:
             # Create a fresh MA_BBOB problem for test evaluation
-            # Use same instances as training for fair comparison
             training_instances = list(range(0, 20))
-            test_instances = training_instances
+            test_instances = list(range(20, 70))  # 50 test instances
             
             problem = MA_BBOB(
                 dims=[5], 
-                budget_factor=2000,  # Increased from 500 to match training
+                budget_factor=2000,
                 training_instances=training_instances,
                 test_instances=test_instances
             )
@@ -179,8 +182,10 @@ if __name__ == "__main__":
                     continue
 
                 try:
-                    problem.test(solution, ioh_dir=ioh_dir)
-                    print(f"✓ IOH data written for {solution.name}")
+                    for test_seed in range(5):
+                        np.random.seed(test_seed)
+                        problem.test(solution, ioh_dir=ioh_dir)
+                    print(f"✓ IOH data written for {solution.name} (5 seeds, 50 instances, 250 runs)")
                 except Exception as e:
                     print(f"✗ Failed: {e}")
 

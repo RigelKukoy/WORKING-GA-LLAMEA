@@ -1,0 +1,843 @@
+Found 8 algorithms with fitness > 0.81
+
+--- Algorithm 1 ---
+ID: 2090f1a6-3df7-41f3-b337-22436fd042a2
+Name: NeighborhoodAdaptiveDE
+Fitness: 0.861289619460457
+Source: c:\Users\Kukoy\Documents\GA-LLAMEA-BLADE\THESE-GA-LLAMEA\MA_BBOB\run-LLaMEA-5-MA_BBOB-7\log.jsonl
+Code:
+----------------------------------------
+import numpy as np
+
+class NeighborhoodAdaptiveDE:
+    def __init__(self, budget=10000, dim=10, pop_size=50, adapt_freq=50, stagnation_threshold=1000, learning_rate=0.1, neighborhood_size=5):
+        self.budget = budget
+        self.dim = dim
+        self.pop_size = pop_size
+        self.adapt_freq = adapt_freq
+        self.stagnation_threshold = stagnation_threshold
+        self.learning_rate = learning_rate
+        self.neighborhood_size = neighborhood_size
+        self.f = 0.5
+        self.cr = 0.9
+        self.success_f = []
+        self.success_cr = []
+        self.best_fitness_history = []
+
+    def __call__(self, func):
+        self.f_opt = np.Inf
+        self.x_opt = None
+        self.population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+        self.fitness = np.array([func(x) for x in self.population])
+        self.evals = self.pop_size
+        self.last_improvement = 0
+
+        best_idx = np.argmin(self.fitness)
+        self.f_opt = self.fitness[best_idx]
+        self.x_opt = self.population[best_idx]
+        self.best_fitness_history.append(self.f_opt)
+
+        while self.evals < self.budget:
+            for i in range(self.pop_size):
+                # Neighborhood-based Mutation
+                neighbors = np.random.choice(np.arange(self.pop_size), self.neighborhood_size, replace=False)
+                best_neighbor_idx = neighbors[np.argmin(self.fitness[neighbors])]
+                
+                idxs = np.random.choice(np.arange(self.pop_size), 2, replace=False)
+                x1, x2 = self.population[idxs]
+
+                v = self.population[best_neighbor_idx] + self.f * (x1 - x2)
+                v = np.clip(v, func.bounds.lb, func.bounds.ub)
+                
+                # Orthogonal Crossover
+                u = np.copy(self.population[i])
+                j_rand = np.random.randint(self.dim)
+                for j in range(self.dim):
+                    if np.random.rand() < self.cr or j == j_rand:
+                        u[j] = v[j]
+                
+                # Evaluation
+                f_new = func(u)
+                self.evals += 1
+                
+                # Selection
+                if f_new < self.fitness[i]:
+                    self.success_f.append(self.f)
+                    self.success_cr.append(self.cr)
+                    self.fitness[i] = f_new
+                    self.population[i] = u
+
+                    if f_new < self.f_opt:
+                        self.f_opt = f_new
+                        self.x_opt = u
+                        self.best_fitness_history.append(self.f_opt)
+                        self.last_improvement = self.evals
+
+            # Adaptive Parameter Control
+            if self.evals % self.adapt_freq == 0:
+                if self.success_f:
+                    self.f = (1 - self.learning_rate) * self.f + self.learning_rate * np.mean(self.success_f)
+                    self.cr = (1 - self.learning_rate) * self.cr + self.learning_rate * np.mean(self.success_cr)
+                self.f = np.clip(self.f, 0.1, 0.9)
+                self.cr = np.clip(self.cr, 0.1, 1.0)
+                self.success_f = []
+                self.success_cr = []
+            
+            # Stagnation Check and Restart
+            if self.evals - self.last_improvement > self.stagnation_threshold:
+                self.population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+                self.fitness = np.array([func(x) for x in self.population])
+                self.evals += self.pop_size
+                best_idx = np.argmin(self.fitness)
+                self.f_opt = self.fitness[best_idx]
+                self.x_opt = self.population[best_idx]
+                self.last_improvement = self.evals
+                self.best_fitness_history.append(self.f_opt)
+
+
+            if self.evals >= self.budget:
+                break
+                    
+        return self.f_opt, self.x_opt
+----------------------------------------
+
+--- Algorithm 2 ---
+ID: bac52812-f32f-418b-90f0-9e1c38f46fc5
+Name: SimplifiedNeighborhoodAdaptiveDE
+Fitness: 0.8514849913057125
+Source: c:\Users\Kukoy\Documents\GA-LLAMEA-BLADE\THESE-GA-LLAMEA\MA_BBOB\run-LLaMEA-5-MA_BBOB-7\log.jsonl
+Code:
+----------------------------------------
+import numpy as np
+
+class SimplifiedNeighborhoodAdaptiveDE:
+    def __init__(self, budget=10000, dim=10, pop_size=50, adapt_freq=50, stagnation_threshold=1000, learning_rate=0.1, initial_neighborhood_size=5, diversity_threshold=0.01):
+        self.budget = budget
+        self.dim = dim
+        self.pop_size = pop_size
+        self.adapt_freq = adapt_freq
+        self.stagnation_threshold = stagnation_threshold
+        self.learning_rate = learning_rate
+        self.neighborhood_size = initial_neighborhood_size
+        self.diversity_threshold = diversity_threshold
+        self.f = 0.5
+        self.cr = 0.9
+        self.success_f = []
+        self.success_cr = []
+        self.last_improvement = 0
+
+    def __call__(self, func):
+        self.f_opt = np.Inf
+        self.x_opt = None
+        self.population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+        self.fitness = np.array([func(x) for x in self.population])
+        self.evals = self.pop_size
+
+        best_idx = np.argmin(self.fitness)
+        self.f_opt = self.fitness[best_idx]
+        self.x_opt = self.population[best_idx]
+
+        while self.evals < self.budget:
+            for i in range(self.pop_size):
+                # Neighborhood-based Mutation
+                neighbors = np.random.choice(np.arange(self.pop_size), min(self.neighborhood_size, self.pop_size - 1), replace=False)
+                neighbors = neighbors[neighbors != i] # Ensure i is not in neighbors
+                best_neighbor_idx = neighbors[np.argmin(self.fitness[neighbors])] if len(neighbors) > 0 else i # Handle edge case
+
+                idxs = np.random.choice(np.arange(self.pop_size), 2, replace=False)
+                x1, x2 = self.population[idxs]
+
+                v = self.population[best_neighbor_idx] + self.f * (x1 - x2)
+                v = np.clip(v, func.bounds.lb, func.bounds.ub)
+                
+                # Crossover
+                u = np.copy(self.population[i])
+                j_rand = np.random.randint(self.dim)
+                for j in range(self.dim):
+                    if np.random.rand() < self.cr or j == j_rand:
+                        u[j] = v[j]
+                
+                # Evaluation
+                f_new = func(u)
+                self.evals += 1
+                
+                # Selection
+                if f_new < self.fitness[i]:
+                    self.success_f.append(self.f)
+                    self.success_cr.append(self.cr)
+                    self.fitness[i] = f_new
+                    self.population[i] = u
+
+                    if f_new < self.f_opt:
+                        self.f_opt = f_new
+                        self.x_opt = u
+                        self.last_improvement = self.evals
+
+            # Adaptive Parameter Control
+            if self.evals % self.adapt_freq == 0:
+                if self.success_f:
+                    self.f = (1 - self.learning_rate) * self.f + self.learning_rate * np.mean(self.success_f)
+                    self.cr = (1 - self.learning_rate) * self.cr + self.learning_rate * np.mean(self.success_cr)
+                self.f = np.clip(self.f, 0.1, 0.9)
+                self.cr = np.clip(self.cr, 0.1, 1.0)
+                self.success_f = []
+                self.success_cr = []
+
+            # Population Rejuvenation
+            if self.evals - self.last_improvement > self.stagnation_threshold:
+                diversity = np.std(self.population)
+                if diversity < self.diversity_threshold:
+                    self.population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+                    self.fitness = np.array([func(x) for x in self.population])
+                    self.evals += self.pop_size
+                    best_idx = np.argmin(self.fitness)
+                    self.f_opt = self.fitness[best_idx]
+                    self.x_opt = self.population[best_idx]
+                    self.last_improvement = self.evals
+
+            if self.evals >= self.budget:
+                break
+                    
+        return self.f_opt, self.x_opt
+----------------------------------------
+
+--- Algorithm 3 ---
+ID: fc7f0cfa-a316-4864-bd38-0f4d861adbf9
+Name: DynamicPopulationDE
+Fitness: 0.8431733748501034
+Source: c:\Users\Kukoy\Documents\GA-LLAMEA-BLADE\THESE-GA-LLAMEA\MA_BBOB\run-LLaMEA-2-MA_BBOB-5\log.jsonl
+Code:
+----------------------------------------
+import numpy as np
+
+class DynamicPopulationDE:
+    def __init__(self, budget=10000, dim=10, pop_size=50, F=0.5, Cr=0.9, initial_exploit_ratio=0.3, adaptation_rate=0.1):
+        self.budget = budget
+        self.dim = dim
+        self.pop_size = pop_size
+        self.exploit_ratio = initial_exploit_ratio
+        self.explore_size = int(pop_size * (1 - self.exploit_ratio))
+        self.exploit_size = pop_size - self.explore_size
+        self.F = F
+        self.Cr = Cr
+        self.f_opt = np.Inf
+        self.x_opt = None
+        self.adaptation_rate = adaptation_rate  # How quickly the population ratio adapts
+        self.explore_success_rate = 0.0
+        self.exploit_success_rate = 0.0
+
+    def __call__(self, func):
+        # Initialize populations
+        self.explore_pop = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.explore_size, self.dim))
+        self.exploit_pop = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.exploit_size, self.dim))
+        
+        # Initial evaluation
+        explore_fitness = np.array([func(x) for x in self.explore_pop])
+        exploit_fitness = np.array([func(x) for x in self.exploit_pop])
+        self.budget -= self.pop_size
+
+        # Find initial best
+        best_explore_idx = np.argmin(explore_fitness)
+        best_exploit_idx = np.argmin(exploit_fitness)
+
+        if explore_fitness[best_explore_idx] < exploit_fitness[best_exploit_idx]:
+            self.f_opt = explore_fitness[best_explore_idx]
+            self.x_opt = self.explore_pop[best_explore_idx].copy()
+        else:
+            self.f_opt = exploit_fitness[best_exploit_idx]
+            self.x_opt = self.exploit_pop[best_exploit_idx].copy()
+
+        generation = 0
+        while self.budget > 0:
+            generation += 1
+            explore_successes = 0
+            exploit_successes = 0
+
+            # Explore population DE
+            for i in range(self.explore_size):
+                idxs = np.random.choice(self.explore_size, 3, replace=False)
+                x_r1, x_r2, x_r3 = self.explore_pop[idxs]
+                mutant = x_r1 + self.F * (x_r2 - x_r3)
+                mutant = np.clip(mutant, func.bounds.lb, func.bounds.ub)
+                cross_mask = np.random.rand(self.dim) < self.Cr
+                trial = np.where(cross_mask, mutant, self.explore_pop[i])
+                f_trial = func(trial)
+                self.budget -= 1
+                if f_trial < explore_fitness[i]:
+                    self.explore_pop[i] = trial
+                    explore_fitness[i] = f_trial
+                    explore_successes += 1
+                    if f_trial < self.f_opt:
+                        self.f_opt = f_trial
+                        self.x_opt = trial.copy()
+
+                if self.budget <= 0:
+                    break
+                    
+            if self.budget <= 0:
+                break
+            # Exploit population DE - biased towards x_opt
+            for i in range(self.exploit_size):
+                idxs = np.random.choice(self.exploit_size, 2, replace=False)
+                x_r1, x_r2 = self.exploit_pop[idxs]
+                mutant = self.x_opt + self.F * (x_r1 - x_r2) # Bias towards x_opt
+                mutant = np.clip(mutant, func.bounds.lb, func.bounds.ub)
+                cross_mask = np.random.rand(self.dim) < self.Cr
+                trial = np.where(cross_mask, mutant, self.exploit_pop[i])
+                f_trial = func(trial)
+                self.budget -= 1
+                if f_trial < exploit_fitness[i]:
+                    self.exploit_pop[i] = trial
+                    exploit_fitness[i] = f_trial
+                    exploit_successes += 1
+                    if f_trial < self.f_opt:
+                        self.f_opt = f_trial
+                        self.x_opt = trial.copy()
+                        
+                if self.budget <= 0:
+                    break
+            
+            # Adapt population sizes based on success rates
+            self.explore_success_rate = explore_successes / self.explore_size
+            self.exploit_success_rate = exploit_successes / self.exploit_size
+
+            if self.explore_success_rate > self.exploit_success_rate:
+                # Increase explore, decrease exploit
+                self.exploit_ratio -= self.adaptation_rate * (1 - self.exploit_ratio)
+            else:
+                # Increase exploit, decrease explore
+                self.exploit_ratio += self.adaptation_rate * self.exploit_ratio
+            
+            self.exploit_ratio = np.clip(self.exploit_ratio, 0.1, 0.9)  # Keep ratio within bounds
+            new_exploit_size = int(self.pop_size * self.exploit_ratio)
+            new_explore_size = self.pop_size - new_exploit_size
+            
+            # Resize populations: simple reallocation (can be improved with more sophisticated migration)
+            if new_explore_size != self.explore_size or new_exploit_size != self.exploit_size:
+                # Resize populations (crude reallocation)
+                # Combine populations
+                combined_pop = np.vstack((self.explore_pop, self.exploit_pop))
+                combined_fitness = np.concatenate((explore_fitness, exploit_fitness))
+
+                # Sort by fitness
+                sorted_indices = np.argsort(combined_fitness)
+                combined_pop = combined_pop[sorted_indices]
+                combined_fitness = combined_fitness[sorted_indices]
+
+                # Split into new populations
+                self.explore_pop = combined_pop[:new_explore_size]
+                self.exploit_pop = combined_pop[new_explore_size:]
+                explore_fitness = combined_fitness[:new_explore_size]
+                exploit_fitness = combined_fitness[new_explore_size:]
+
+                # If the new sizes are bigger than current populations, fill with random individuals
+                if new_explore_size > self.explore_pop.shape[0]:
+                   num_new_individuals = new_explore_size - self.explore_pop.shape[0]
+                   new_individuals = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(num_new_individuals, self.dim))
+                   self.explore_pop = np.vstack((self.explore_pop, new_individuals))
+                   explore_fitness = np.concatenate((explore_fitness, np.array([func(x) for x in new_individuals])))
+                   self.budget -= num_new_individuals
+                if new_exploit_size > self.exploit_pop.shape[0]:
+                   num_new_individuals = new_exploit_size - self.exploit_pop.shape[0]
+                   new_individuals = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(num_new_individuals, self.dim))
+                   self.exploit_pop = np.vstack((self.exploit_pop, new_individuals))
+                   exploit_fitness = np.concatenate((exploit_fitness, np.array([func(x) for x in new_individuals])))
+                   self.budget -= num_new_individuals
+                
+                self.explore_size = new_explore_size
+                self.exploit_size = new_exploit_size
+
+            # Ensure populations are not empty: if so fill with random individuals
+            if self.explore_size == 0:
+                self.explore_pop = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+                explore_fitness = np.array([func(x) for x in self.explore_pop])
+                self.explore_size = self.pop_size
+                self.exploit_size = 0
+                self.budget -= self.pop_size
+            if self.exploit_size == 0:
+                self.exploit_pop = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+                exploit_fitness =  np.array([func(x) for x in self.exploit_pop])
+                self.exploit_size = self.pop_size
+                self.explore_size = 0
+                self.budget -= self.pop_size
+
+            if self.budget <= 0:
+                break
+
+        return self.f_opt, self.x_opt
+----------------------------------------
+
+--- Algorithm 4 ---
+ID: 9c9801be-4a80-417a-b22d-7175bb13814c
+Name: NeighborhoodAdaptiveDE
+Fitness: 0.8360611236377713
+Source: c:\Users\Kukoy\Documents\GA-LLAMEA-BLADE\THESE-GA-LLAMEA\MA_BBOB\run-LLaMEA-5-MA_BBOB-7\log.jsonl
+Code:
+----------------------------------------
+import numpy as np
+
+class NeighborhoodAdaptiveDE:
+    def __init__(self, budget=10000, dim=10, pop_size=50, adapt_freq=50, stagnation_threshold=1000, learning_rate=0.1, initial_neighborhood_size=5, neighborhood_adapt_rate=0.1, diversity_threshold=0.01):
+        self.budget = budget
+        self.dim = dim
+        self.pop_size = pop_size
+        self.adapt_freq = adapt_freq
+        self.stagnation_threshold = stagnation_threshold
+        self.learning_rate = learning_rate
+        self.initial_neighborhood_size = initial_neighborhood_size
+        self.neighborhood_size = initial_neighborhood_size
+        self.neighborhood_adapt_rate = neighborhood_adapt_rate
+        self.diversity_threshold = diversity_threshold
+        self.f = 0.5
+        self.cr = 0.9
+        self.success_f = []
+        self.success_cr = []
+        self.best_fitness_history = []
+
+    def __call__(self, func):
+        self.f_opt = np.Inf
+        self.x_opt = None
+        self.population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+        self.fitness = np.array([func(x) for x in self.population])
+        self.evals = self.pop_size
+        self.last_improvement = 0
+
+        best_idx = np.argmin(self.fitness)
+        self.f_opt = self.fitness[best_idx]
+        self.x_opt = self.population[best_idx]
+        self.best_fitness_history.append(self.f_opt)
+
+        while self.evals < self.budget:
+            for i in range(self.pop_size):
+                # Neighborhood-based Mutation
+                neighbors = np.random.choice(np.arange(self.pop_size), min(self.neighborhood_size, self.pop_size), replace=False)
+                best_neighbor_idx = neighbors[np.argmin(self.fitness[neighbors])]
+                
+                idxs = np.random.choice(np.arange(self.pop_size), 2, replace=False)
+                x1, x2 = self.population[idxs]
+
+                v = self.population[best_neighbor_idx] + self.f * (x1 - x2)
+                v = np.clip(v, func.bounds.lb, func.bounds.ub)
+                
+                # Orthogonal Crossover
+                u = np.copy(self.population[i])
+                j_rand = np.random.randint(self.dim)
+                for j in range(self.dim):
+                    if np.random.rand() < self.cr or j == j_rand:
+                        u[j] = v[j]
+                
+                # Evaluation
+                f_new = func(u)
+                self.evals += 1
+                
+                # Selection
+                if f_new < self.fitness[i]:
+                    self.success_f.append(self.f)
+                    self.success_cr.append(self.cr)
+                    self.fitness[i] = f_new
+                    self.population[i] = u
+
+                    if f_new < self.f_opt:
+                        self.f_opt = f_new
+                        self.x_opt = u
+                        self.best_fitness_history.append(self.f_opt)
+                        self.last_improvement = self.evals
+
+            # Adaptive Parameter Control
+            if self.evals % self.adapt_freq == 0:
+                # Adjust F/CR
+                if self.success_f:
+                    self.f = (1 - self.learning_rate) * self.f + self.learning_rate * np.mean(self.success_f)
+                    self.cr = (1 - self.learning_rate) * self.cr + self.learning_rate * np.mean(self.success_cr)
+                self.f = np.clip(self.f, 0.1, 0.9)
+                self.cr = np.clip(self.cr, 0.1, 1.0)
+                self.success_f = []
+                self.success_cr = []
+                
+                # Adjust neighborhood size based on success and diversity
+                if len(self.best_fitness_history) > 1 and self.best_fitness_history[-1] == self.best_fitness_history[-2]:
+                    self.neighborhood_size = int(max(1, self.neighborhood_size * (1 - self.neighborhood_adapt_rate)))  # Reduce neighborhood size if stagnant
+                else:
+                    self.neighborhood_size = int(min(self.pop_size, self.neighborhood_size * (1 + self.neighborhood_adapt_rate)))  # Increase if improving
+                    
+                # Calculate population diversity
+                diversity = np.std(self.population)
+                if diversity < self.diversity_threshold:
+                     self.population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+                     self.fitness = np.array([func(x) for x in self.population])
+                     self.evals += self.pop_size
+                     best_idx = np.argmin(self.fitness)
+                     self.f_opt = self.fitness[best_idx]
+                     self.x_opt = self.population[best_idx]
+                     self.last_improvement = self.evals
+                     self.best_fitness_history.append(self.f_opt)
+                     
+            # Stagnation Check and Restart
+            if self.evals - self.last_improvement > self.stagnation_threshold:
+                self.population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+                self.fitness = np.array([func(x) for x in self.population])
+                self.evals += self.pop_size
+                best_idx = np.argmin(self.fitness)
+                self.f_opt = self.fitness[best_idx]
+                self.x_opt = self.population[best_idx]
+                self.last_improvement = self.evals
+                self.best_fitness_history.append(self.f_opt)
+                # Reset neighborhood size after restart
+                self.neighborhood_size = self.initial_neighborhood_size
+
+            if self.evals >= self.budget:
+                break
+                    
+        return self.f_opt, self.x_opt
+----------------------------------------
+
+--- Algorithm 5 ---
+ID: cbf38d94-b6ef-4882-a861-fa3ea9d17741
+Name: AdaptiveDEwithSelfAdaptiveLocalSearchImproved
+Fitness: 0.8236791201775165
+Source: c:\Users\Kukoy\Documents\GA-LLAMEA-BLADE\THESE-GA-LLAMEA\MA_BBOB\run-LLaMEA-4-MA_BBOB-9\log.jsonl
+Code:
+----------------------------------------
+import numpy as np
+
+class AdaptiveDEwithSelfAdaptiveLocalSearchImproved:
+    def __init__(self, budget=10000, dim=10, pop_size=20, memory_size=10, initial_local_search_prob=0.1, archive_size=100, ls_decay=0.99, ls_increase=1.01, ls_step_size=0.1, ls_step_decay=0.95):
+        self.budget = budget
+        self.dim = dim
+        self.pop_size = pop_size
+        self.memory_size = memory_size
+        self.local_search_prob = initial_local_search_prob
+        self.archive_size = archive_size
+        self.F_memory = np.ones(self.memory_size) * 0.5
+        self.Cr_memory = np.ones(self.memory_size) * 0.9
+        self.archive = []
+        self.f_opt = np.Inf
+        self.x_opt = None
+        self.ls_decay = ls_decay
+        self.ls_increase = ls_increase
+        self.ls_step_size = ls_step_size
+        self.ls_step_decay = ls_step_decay
+        self.successful_F = []
+        self.successful_Cr = []
+
+    def __call__(self, func):
+        # Initialize population
+        population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+        fitness = np.array([func(x) for x in population])
+        self.budget -= self.pop_size
+
+        self.f_opt = np.min(fitness)
+        self.x_opt = population[np.argmin(fitness)]
+        
+        previous_f_opt = self.f_opt
+
+        while self.budget > 0:
+            for i in range(self.pop_size):
+                # Parameter adaptation using success history with weighted sampling
+                if self.successful_F:
+                    F = np.random.choice(self.successful_F)
+                else:
+                    F = 0.5  # Default value if no successful F values yet
+
+                if self.successful_Cr:
+                    Cr = np.random.choice(self.successful_Cr)
+                else:
+                    Cr = 0.9  # Default value if no successful Cr values yet
+
+                indices = np.random.choice(self.pop_size, size=3, replace=False)
+                a, b, c = indices[0], indices[1], indices[2]
+
+                # Differential Evolution Mutation
+                mutant = population[a] + F * (population[b] - population[c])
+                mutant = np.clip(mutant, func.bounds.lb, func.bounds.ub)
+
+                # Crossover
+                trial = np.copy(population[i])
+                mask = np.random.rand(self.dim) < Cr
+                trial[mask] = mutant[mask]
+
+                # Local Search
+                if np.random.rand() < self.local_search_prob:
+                    trial = self.local_search(trial, func)
+
+                # Evaluation
+                f_trial = func(trial)
+                self.budget -= 1
+                if self.budget <= 0:
+                    break
+
+                # Selection
+                if f_trial < fitness[i]:
+                    self.archive.append(population[i])
+                    if len(self.archive) > self.archive_size:
+                        self.archive.pop(0)
+                    
+                    population[i] = trial
+                    fitness[i] = f_trial
+
+                    self.successful_F.append(F)
+                    self.successful_Cr.append(Cr)
+                    if len(self.successful_F) > self.memory_size:
+                        self.successful_F.pop(0)
+                        self.successful_Cr.pop(0)
+
+                    # Update global best
+                    if f_trial < self.f_opt:
+                        self.f_opt = f_trial
+                        self.x_opt = trial
+            
+            if self.f_opt < previous_f_opt:
+                self.local_search_prob = min(1.0, self.local_search_prob * self.ls_increase)
+                self.ls_step_size = min(0.1, self.ls_step_size/self.ls_step_decay)
+            else:
+                self.local_search_prob = max(0.01, self.local_search_prob * self.ls_decay)
+                self.ls_step_size = max(1e-6, self.ls_step_size * self.ls_step_decay)
+            previous_f_opt = self.f_opt
+                
+        return self.f_opt, self.x_opt
+
+    def local_search(self, x, func):
+        # Local search using random step with adaptive step size
+        new_x = x + np.random.uniform(-self.ls_step_size, self.ls_step_size, size=self.dim)
+        new_x = np.clip(new_x, func.bounds.lb, func.bounds.ub)
+        return new_x
+----------------------------------------
+
+--- Algorithm 6 ---
+ID: 6abbe250-3c78-4f4d-b5ce-47eed0df0862
+Name: AdaptiveDEOrthogonalCauchy
+Fitness: 0.8118225976101032
+Source: c:\Users\Kukoy\Documents\GA-LLAMEA-BLADE\THESE-GA-LLAMEA\MA_BBOB\run-LLaMEA-5-MA_BBOB-6\log.jsonl
+Code:
+----------------------------------------
+import numpy as np
+
+class AdaptiveDEOrthogonalCauchy:
+    def __init__(self, budget=10000, dim=10, pop_size=20, F=0.5, CR=0.9, cauchy_scale=0.01):
+        self.budget = budget
+        self.dim = dim
+        self.pop_size = pop_size
+        self.F = F
+        self.CR = CR
+        self.cauchy_scale = cauchy_scale
+        self.pop = None
+        self.fitness = None
+        self.eval_count = 0
+        self.best_fitness = np.inf
+        self.best_position = None
+        self.success_F = []
+        self.success_CR = []
+
+    def initialize_population(self, func):
+        self.pop = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+        self.fitness = np.array([func(x) for x in self.pop])
+        self.eval_count += self.pop_size
+        self.best_position = self.pop[np.argmin(self.fitness)].copy()
+        self.best_fitness = np.min(self.fitness)
+
+    def mutation(self, i, func):
+        idxs = np.random.choice(self.pop_size, 3, replace=False)
+        x_r1, x_r2, x_r3 = self.pop[idxs]
+        mutation_vector = x_r1 + self.F * (x_r2 - x_r3)
+
+        # Cauchy perturbation near the best solution
+        mutation_vector += self.cauchy_scale * np.random.standard_cauchy(size=self.dim) * (self.best_position - self.pop[i])
+        
+        mutation_vector = np.clip(mutation_vector, func.bounds.lb, func.bounds.ub)
+        return mutation_vector
+
+    def orthogonal_crossover(self, v_i, i):
+        u_i = self.pop[i].copy()
+        for j in range(self.dim):
+            if np.random.rand() < self.CR:
+                u_i[j] = v_i[j]
+        return u_i
+
+    def selection(self, func, u_i, i):
+        f_u_i = func(u_i)
+        self.eval_count += 1
+
+        if f_u_i < self.fitness[i]:
+            self.success_F.append(self.F)
+            self.success_CR.append(self.CR)
+
+            self.fitness[i] = f_u_i
+            self.pop[i] = u_i.copy()
+            if f_u_i < self.best_fitness:
+                self.best_fitness = f_u_i
+                self.best_position = u_i.copy()
+
+
+    def update_parameters(self):
+        if self.success_F:
+            self.F = 0.8 * self.F + 0.2 * np.mean(self.success_F)
+            self.CR = 0.8 * self.CR + 0.2 * np.mean(self.success_CR)
+
+        self.F = np.clip(self.F, 0.1, 0.9)
+        self.CR = np.clip(self.CR, 0.1, 0.9)
+        self.success_F = []
+        self.success_CR = []
+
+
+    def __call__(self, func):
+        self.initialize_population(func)
+
+        while self.eval_count < self.budget:
+            for i in range(self.pop_size):
+                v_i = self.mutation(i, func)
+                u_i = self.orthogonal_crossover(v_i, i)
+                u_i = np.clip(u_i, func.bounds.lb, func.bounds.ub)                
+                self.selection(func, u_i, i)
+            self.update_parameters()
+
+        return self.best_fitness, self.best_position
+----------------------------------------
+
+--- Algorithm 7 ---
+ID: afb9f2ac-5507-4791-b04c-1d06bac911ca
+Name: AdaptiveDE
+Fitness: 0.8111630619325169
+Source: c:\Users\Kukoy\Documents\GA-LLAMEA-BLADE\THESE-GA-LLAMEA\MA_BBOB\run-LLaMEA-3-MA_BBOB-9\log.jsonl
+Code:
+----------------------------------------
+import numpy as np
+
+class AdaptiveDE:
+    def __init__(self, budget=10000, dim=10, pop_factor=5, p=0.1):
+        self.budget = budget
+        self.dim = dim
+        self.pop_size = int(pop_factor * dim)
+        self.F = 0.5
+        self.Cr = 0.9
+        self.pop = None
+        self.fitness = None
+        self.f_opt = np.Inf
+        self.x_opt = None
+        self.eval_count = 0
+        self.p = p  # Probability for mirrored sampling
+        self.successful_F = []
+        self.successful_Cr = []
+
+    def initialize_population(self, func):
+        self.pop = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+        self.fitness = np.array([func(x) for x in self.pop])
+        self.eval_count += self.pop_size
+        best_index = np.argmin(self.fitness)
+        self.f_opt = self.fitness[best_index]
+        self.x_opt = self.pop[best_index]
+
+    def evolve(self, func):
+        for i in range(self.pop_size):
+            if self.eval_count >= self.budget:
+                break
+
+            # Mutation
+            idxs = np.random.choice(self.pop_size, 3, replace=False)
+            x_r1, x_r2, x_r3 = self.pop[idxs]
+            x_mutated = x_r1 + self.F * (x_r2 - x_r3)
+
+            # Jittering to avoid stagnation
+            if np.random.rand() < 0.05:
+                x_mutated += np.random.normal(0, 0.01, size=self.dim)
+            
+            # Mirrored sampling
+            if np.random.rand() < self.p:
+                x_mutated = np.where(x_mutated < func.bounds.lb, func.bounds.lb + (func.bounds.lb - x_mutated), x_mutated)
+                x_mutated = np.where(x_mutated > func.bounds.ub, func.bounds.ub - (x_mutated - func.bounds.ub), x_mutated)
+            
+            x_mutated = np.clip(x_mutated, func.bounds.lb, func.bounds.ub)
+
+            # Crossover
+            x_trial = self.pop[i].copy()
+            j_rand = np.random.randint(self.dim)
+            for j in range(self.dim):
+                if np.random.rand() < self.Cr or j == j_rand:
+                    x_trial[j] = x_mutated[j]
+
+            # Selection
+            f_trial = func(x_trial)
+            self.eval_count += 1
+
+            if f_trial < self.fitness[i]:
+                self.successful_F.append(self.F)
+                self.successful_Cr.append(self.Cr)
+                self.fitness[i] = f_trial
+                self.pop[i] = x_trial
+
+                if f_trial < self.f_opt:
+                    self.f_opt = f_trial
+                    self.x_opt = x_trial
+
+        # Adapt F and Cr based on successful values
+        if self.successful_F:
+            self.F = np.mean(self.successful_F)
+            self.Cr = np.mean(self.successful_Cr)
+            self.successful_F = []
+            self.successful_Cr = []
+        else:
+            self.F = 0.5  # Reset if no successful updates
+            self.Cr = 0.9
+
+
+    def __call__(self, func):
+        self.initialize_population(func)
+
+        while self.eval_count < self.budget:
+            self.evolve(func)
+
+        return self.f_opt, self.x_opt
+----------------------------------------
+
+--- Algorithm 8 ---
+ID: 6c928a56-d2ab-4953-9e91-4c7eaf18e59d
+Name: AdaptiveDE
+Fitness: 0.8100056913544973
+Source: c:\Users\Kukoy\Documents\GA-LLAMEA-BLADE\THESE-GA-LLAMEA\MA_BBOB\run-LLaMEA-3-MA_BBOB-4\log.jsonl
+Code:
+----------------------------------------
+import numpy as np
+
+class AdaptiveDE:
+    def __init__(self, budget=10000, dim=10, pop_size=20):
+        self.budget = budget
+        self.dim = dim
+        self.pop_size = pop_size
+
+    def __call__(self, func):
+        # Initialization
+        population = np.random.uniform(func.bounds.lb, func.bounds.ub, size=(self.pop_size, self.dim))
+        fitness = np.array([func(x) for x in population])
+        self.budget -= self.pop_size
+
+        self.f_opt = np.min(fitness)
+        self.x_opt = population[np.argmin(fitness)]
+
+        while self.budget > 0:
+            for i in range(self.pop_size):
+                # Mutation: DE/rand/1 - Simplified with dynamic F
+                F = np.random.uniform(0.2, 0.8)  # Dynamic F
+                indices = np.random.choice(self.pop_size, 3, replace=False)
+                x_r1, x_r2, x_r3 = population[indices]
+                mutant = x_r1 + F * (x_r2 - x_r3)
+                mutant = np.clip(mutant, func.bounds.lb, func.bounds.ub)
+
+                # Crossover - Simplified with dynamic CR
+                CR = np.random.uniform(0.5, 1.0)  # Dynamic CR
+                crossover_mask = np.random.rand(self.dim) < CR
+                trial_vector = np.where(crossover_mask, mutant, population[i])
+
+                # Selection
+                f_trial = func(trial_vector)
+                self.budget -= 1
+
+                if f_trial < fitness[i]:
+                    population[i] = trial_vector
+                    fitness[i] = f_trial
+
+                    if f_trial < self.f_opt:
+                        self.f_opt = f_trial
+                        self.x_opt = trial_vector
+
+        return self.f_opt, self.x_opt
+----------------------------------------
+
