@@ -152,15 +152,17 @@ class GA_LLaMEA:
                      0.9 is a good default (10% decay per observation).
             
             tau_max: Maximum posterior std dev for D-TS. Caps exploration.
-                     Calibrated for binary rewards {-0.5, 0.0, 1.0} following the
-                     D-TS paper: tau_max ~ mu_max/3 where mu_max ~ 0.2-0.4.
-                     Default 0.1 balances exploration vs exploitation.
+                     Calibrated for normalized binary rewards {0.0, 1/3, 1.0}
+                     following the D-TS paper: tau_max ~ mu_max/3 where
+                     mu_max ~ 0.2-0.4. Default 0.1 balances exploration vs
+                     exploitation.
             
-            prior_variance: Prior variance for arm rewards. Calibrated for binary
-                           reward scale. Default 0.25.
+            prior_variance: Prior variance for arm rewards. Calibrated for
+                           normalized [0,1] binary reward scale. Default 0.25.
             
-            reward_variance: Expected variance of rewards. Calibrated for binary
-                            reward scale {-0.5, 0.0, 1.0}. Default 0.5.
+            reward_variance: Expected variance of rewards. Calibrated for
+                            normalized binary reward scale {0.0, 1/3, 1.0}.
+                            Default 0.5.
             
             **kwargs: Additional arguments stored but not used directly.
         """
@@ -368,7 +370,7 @@ class GA_LLaMEA:
                 if child.error:
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
-                    # Failed — penalize operator with is_valid=False (-0.5)
+                    # Failed — penalize operator with is_valid=False (reward=0.0)
                     self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
                     continue
 
@@ -378,7 +380,7 @@ class GA_LLaMEA:
                     child.error = f"Validation failed: {validation_error}"
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
-                    # Validation failure — penalize operator with is_valid=False (-0.5)
+                    # Validation failure — penalize operator with is_valid=False (reward=0.0)
                     self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
                     print(f"Code validation failed for {child.name}: {validation_error}")
                     continue
@@ -402,14 +404,14 @@ class GA_LLaMEA:
                     child.metadata["reward"] = reward
                     child.metadata["baseline_fitness"] = baseline_fitness
                 else:
-                    # Evaluation failure (runtime error, timeout, etc.) — penalize with is_valid=False (-0.5)
+                    # Evaluation failure (runtime error, timeout, etc.) — penalize with is_valid=False (reward=0.0)
                     failure_reward = calculate_reward(0, 0, is_valid=False)
                     self.bandit.update(operator_name, failure_reward)
                     child.metadata["reward"] = failure_reward
                     print(f"Evaluation failed for {child.name}: {child.error}")
 
             except Exception as e:
-                # Unexpected failure — penalize operator with is_valid=False (-0.5)
+                # Unexpected failure — penalize operator with is_valid=False (reward=0.0)
                 self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
                 continue
                 
