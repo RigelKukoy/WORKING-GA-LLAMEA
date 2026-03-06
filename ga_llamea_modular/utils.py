@@ -20,21 +20,21 @@ from typing import Optional, Any, Tuple, Type
 
 
 def calculate_reward(parent_score: float, child_score: float, is_valid: bool) -> float:
-    """Calculate normalized binary reward for bandit update.
+    """Calculate graduated reward for bandit update.
     
-    Uses a binary reward signal normalized to [0, 1] as required by the
-    Discounted Thompson Sampling paper (Qi et al., 2023), which assumes
-    rewards have bounded support in [0, 1].
+    Uses a graduated reward signal bounded in [0, 1] as required by the
+    Discounted Thompson Sampling paper (Qi et al., 2023).
     
-    Raw binary rewards {-0.5, 0.0, 1.0} are min-max normalized via
-    (reward + 0.5) / 1.5 to produce {0.0, 1/3, 1.0}. Binary rewards
-    produce large, distinguishable signals between arms (~0.2-0.3 mean
-    difference), enabling the D-TS bandit to learn effectively even
-    with discount=0.9 reducing effective samples to 2-4 per arm.
+    Graduated rewards preserve magnitude information for BOTH improvements
+    and regressions, giving the D-TS bandit richer signal — especially
+    critical with low budgets (~30 total observations per arm).
     
-    The failure penalty (0.0) lets the bandit distinguish operators that
-    produce broken code (e.g., random_new with 40% failure) from operators
-    that produce valid but non-improving code (reward ≈ 0.33).
+    Reward scale:
+        0.0       invalid (error, timeout, code failure)
+        0.1       valid but terrible (child_score near 0)
+        0.1-0.5   valid regression, proportional to child/parent ratio
+        0.6-1.0   valid improvement, graduated by magnitude
+                  (10%+ improvement = 1.0, smaller = 0.6-0.96)
     
     Args:
         parent_score: Baseline fitness of the parent (or median for random_new).
@@ -45,16 +45,24 @@ def calculate_reward(parent_score: float, child_score: float, is_valid: bool) ->
                   evaluation errors, and timeouts.
         
     Returns:
-        float: Normalized reward value in [0, 1]:
-            1.0   if valid and improves over parent
-            0.33  if valid but no improvement  (1/3)
-            0.0   if invalid (error, timeout, etc.)
+        float: Graduated reward value in [0, 1]:
+            0.6-1.0   if valid and improves (graduated by improvement magnitude)
+            0.1-0.5   if valid but no improvement (scaled by child/parent ratio)
+            0.0       if invalid (error, timeout, etc.)
         
     Example:
-        >>> calculate_reward(0.5, 0.7, True)    # Improvement
+        >>> calculate_reward(0.5, 0.55, True)   # 10%+ improvement
         1.0
-        >>> calculate_reward(0.7, 0.5, True)    # No improvement
-        0.3333333333333333
+        >>> calculate_reward(0.5, 0.52, True)   # 4% improvement
+        0.76
+        >>> calculate_reward(0.5, 0.501, True)  # Tiny improvement
+        0.604
+        >>> calculate_reward(0.5, 0.45, True)   # Close to parent (regression)
+        0.46
+        >>> calculate_reward(0.5, 0.25, True)   # Half of parent
+        0.3
+        >>> calculate_reward(0.5, 0.0, True)    # Terrible
+        0.1
         >>> calculate_reward(0.5, 0.9, False)   # Invalid
         0.0
         >>> calculate_reward(0.0, 0.3, True)    # Improvement from 0
@@ -62,9 +70,22 @@ def calculate_reward(parent_score: float, child_score: float, is_valid: bool) ->
     """
     if not is_valid:
         return 0.0           # Penalize budget-wasting failures
-    if child_score > parent_score:
-        return 1.0           # Binary: any improvement counts equally
-    return 1.0 / 3.0         # Valid but no improvement
+    if parent_score <= 0:
+        # No meaningful baseline — give credit for absolute quality
+        if child_score > 0:
+            return min(1.0, max(0.1, child_score))
+        return 0.1           # Valid but no signal
+    
+    ratio = max(0.0, child_score / parent_score)
+    
+    if ratio >= 1.0:
+        # Improvement: scale 0.6 → 1.0 based on magnitude
+        # A 10%+ improvement gets max reward; smaller ones get proportionally less
+        improvement_pct = min((ratio - 1.0) / 0.10, 1.0)  # 0→1 over 10% gain
+        return 0.6 + 0.4 * improvement_pct
+    else:
+        # Regression: scale 0.1 → 0.5 based on how close to parent
+        return 0.1 + 0.4 * ratio  # Maps to [0.1, 0.5]
 
 
 def extract_code(response: str) -> Optional[str]:

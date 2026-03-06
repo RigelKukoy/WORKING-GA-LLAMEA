@@ -43,7 +43,8 @@ class GA_LLaMEA_Method(Method):
         n_offspring: int = 16,
         elitism: bool = True,
         discount: float = 0.9,
-        tau_max: float = 0.1,
+        tau_max: float = 0.15,
+        epsilon_exploration: float = 0.1,
         **kwargs,
     ):
         """
@@ -53,12 +54,14 @@ class GA_LLaMEA_Method(Method):
             llm: BLADE's LLM instance for code generation.
             budget: Total number of LLM queries allowed.
             name: Method name for logging and identification.
-            n_parents: Population size (μ). Default 4.
-            n_offspring: Offspring generated per generation (λ). Default 16.
-            elitism: Selection strategy. True = (μ+λ), False = (μ,λ)
-            discount: D-TS discount factor γ ∈ (0, 1]. Default 0.9.
-            tau_max: Maximum posterior std dev for D-TS. Calibrated for binary
-                     rewards per D-TS paper (tau_max ~ mu_max/3). Default 0.1.
+            n_parents: Population size (mu). Default 4.
+            n_offspring: Offspring generated per generation (lambda). Default 16.
+            elitism: Selection strategy. True = (mu+lambda), False = (mu,lambda)
+            discount: D-TS discount factor gamma in (0, 1]. Default 0.9.
+            tau_max: Maximum sampling std dev for D-TS. Paper recommends
+                     tau_max ~ mu_max/5. Default 0.15.
+            epsilon_exploration: Probability of random arm selection.
+                               Prevents arm extinction. Default 0.1.
             **kwargs: Additional arguments passed to GA_LLaMEA.
         """
         super().__init__(llm, budget, name)
@@ -67,6 +70,7 @@ class GA_LLaMEA_Method(Method):
         self.elitism = elitism
         self.discount = discount
         self.tau_max = tau_max
+        self.epsilon_exploration = epsilon_exploration
         self.kwargs = kwargs
 
         # Store the last instance for access to bandit statistics
@@ -93,6 +97,7 @@ class GA_LLaMEA_Method(Method):
             elitism=self.elitism,
             discount=self.discount,
             tau_max=self.tau_max,
+            epsilon_exploration=self.epsilon_exploration,
             **self.kwargs,
         )
 
@@ -126,6 +131,7 @@ class GA_LLaMEA_Method(Method):
             "elitism": self.elitism,
             "discount": self.discount,
             "tau_max": self.tau_max,
+            "epsilon_exploration": self.epsilon_exploration,
             "method_type": "GA-LLAMEA",
         }
         result.update(self.kwargs)

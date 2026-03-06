@@ -17,7 +17,7 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 
-from ga_llamea_modular import GA_LLaMEA
+from iohblade.methods import GA_LLaMEA_Method
 
 if __name__ == "__main__":
     load_dotenv()
@@ -27,16 +27,16 @@ if __name__ == "__main__":
     if not api_key:
         raise ValueError("GEMINI_API_KEY not found in environment. Please set it in .env file.")
     
-    ai_model = "gemini-3-flash-preview"
+    ai_model = "gemini-2.0-flash"
     llm = Gemini_LLM(api_key, ai_model)
     
     # Experiment Configuration
     budget = 100  # LLM queries per run
-    num_runs = 5 # Multiple runs for statistical significance
-    seeds = [0 + i for i in range(num_runs)]  # Seeds: [0, 1, 2, ..., 9]
+    num_runs = 1 # Multiple runs for statistical significance
+    seeds = [4 + i for i in range(num_runs)]  # Seeds: [0, 1, 2, ..., 9]
 
     print("=" * 80)
-    print("GA-LLAMEA 3-Arm vs 4-Arm Experiment")
+    print("GA-LLAMEA 4-Arm Experiment")
     print("=" * 80)
     print(f"Budget: {budget} LLM queries per run")
     print(f"Runs: {num_runs}")
@@ -44,30 +44,11 @@ if __name__ == "__main__":
     print(f"LLM: {ai_model}")
     print()
 
-    # GA-LLAMEA with 3 arms (baseline)
-    # Uses: simplify, crossover, random_new
-    GA_LLaMEA_3arm = GA_LLaMEA(
-        llm=llm,
-        budget=budget,
-        solution_class=Solution,
-        name="GA-LLAMEA-3arm",
-        n_parents=4,
-        n_offspring=8,
-        elitism=True,
-        discount=0.9,
-        tau_max=0.1,
-        arm_names=["simplify", "crossover", "random_new"]  # 3-arm config
-    )
-    print("✓ Configured GA-LLAMEA-3arm (baseline)")
-    print("  Arms: simplify, crossover, random_new")
-    print()
-
     # GA-LLAMEA with 4 arms (new)
     # Uses: simplify, crossover, random_new, refine_weakness
-    GA_LLaMEA_4arm = GA_LLaMEA(
+    GA_LLaMEA_4arm = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        solution_class=Solution,
         name="GA-LLAMEA-4arm",
         n_parents=4,
         n_offspring=8,
@@ -80,11 +61,11 @@ if __name__ == "__main__":
     print("  Arms: simplify, crossover, random_new, refine_weakness")
     print()
 
-    methods = [GA_LLaMEA_3arm, GA_LLaMEA_4arm]
+    methods = [GA_LLaMEA_4arm]
     
     # Generate a unique directory for this experiment run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_dir = f"results/3ARM-vs-4ARM_{timestamp}"
+    experiment_dir = f"results/4ARM-EXPERIMENT_{timestamp}"
     logger = ExperimentLogger(experiment_dir)
     
     print(f"Results will be saved to: {experiment_dir}")
@@ -128,15 +109,8 @@ if __name__ == "__main__":
         if exp_data.empty:
             print("⚠ No experiment data found, skipping IOH generation.")
         else:
-            training_instances = list(range(0, 20))
-            test_instances = training_instances
-            
-            problem = MA_BBOB(
-                dims=[5], 
-                budget_factor=2000,
-                training_instances=training_instances,
-                test_instances=test_instances
-            )
+            # Create a fresh MA_BBOB problem for test evaluation
+            problem = MA_BBOB(dims=[5], budget_factor=2000)
             problem._ensure_env()
 
             total_solutions = len(exp_data)

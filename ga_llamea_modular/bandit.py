@@ -3,55 +3,45 @@ Discounted Thompson Sampling (D-TS) Bandit
 ==========================================
 
 This module implements the multi-armed bandit used for adaptive operator selection
-in GA-LLAMEA. It uses Discounted Thompson Sampling with Gaussian priors.
+in GA-LLAMEA. It uses Discounted Thompson Sampling with Gaussian priors,
+following Qi et al. (2023) Algorithm 1.
 
-ALGORITHM OVERVIEW:
-    D-TS maintains a posterior distribution for each operator (arm) and samples
-    from these distributions to select which operator to use. The "discounted"
-    aspect means older observations are weighted less, allowing the bandit to
-    adapt to non-stationary reward distributions.
+ALGORITHM (Qi et al., Algorithm 1):
+    For each arm i, we track:
+        - discounted_count N_t(gamma, i) = gamma * N_{t-1} + 1{arm i selected}
+        - discounted_sum   mu~_t(gamma, i) = gamma * mu~_{t-1} + 1{arm i selected} * X_t
+    
+    Posterior:
+        mean = mu~_t / N_t                         (discounted empirical average)
+        var  = min(1/N_t, tau_max^2)                (simple 1/n variance, capped)
+    
+    Selection:
+        Sample theta_t(i) ~ N(mean_i, var_i) for each arm
+        Select arm with highest theta
+        With probability epsilon, select a random arm instead (exploration floor)
 
 KEY CONCEPTS:
-    - Arms: The three genetic operators (mutation, crossover, random_new)
-    - Reward: Fitness improvement (child_fitness - baseline_fitness)
-    - Discount factor (γ): Controls how fast old observations fade (0.9 = 10% decay per update)
-    - Posterior: Normal distribution N(μ, τ²) for each arm's expected reward
-
-MATHEMATICAL DETAILS:
-    For each arm, we track:
-        - discounted_count: Σᵢ γⁿ⁻ⁱ (effective sample size)
-        - discounted_sum: Σᵢ γⁿ⁻ⁱ rᵢ (weighted sum of rewards)
-        - discounted_sum_sq: Σᵢ γⁿ⁻ⁱ rᵢ² (for variance estimation)
-    
-    Bayesian update combines prior with likelihood:
-        posterior_var = 1 / (1/prior_var + count/observed_var)
-        posterior_mean = posterior_var × (prior_mean/prior_var + sample_mean×count/observed_var)
-
-BLADE INTEGRATION:
-    This bandit is independent of BLADE - it only cares about arm names
-    and numerical rewards. GA-LLAMEA uses it internally to decide which
-    genetic operator to apply at each step.
+    - Arms: Genetic operators (simplify, crossover, random_new, etc.)
+    - Reward: Fitness-based signal bounded in [0, 1]
+    - Discount factor (gamma): Controls how fast old observations fade
+    - tau_max: Caps sampling variance to prevent over-exploration
+    - epsilon_exploration: Random selection probability to prevent arm extinction
 
 REFERENCES:
-    - "Discounted Thompson Sampling for Non-Stationary Bandit Problems" (Qi et al.)
-    - Thompson Sampling: "On the Likelihood that One Unknown Probability Exceeds Another"
+    - "Discounted Thompson Sampling for Non-Stationary Bandit Problems" (Qi et al., 2023)
 
 USAGE:
     from ga_llamea_modular.bandit import DiscountedThompsonSampler
     
     bandit = DiscountedThompsonSampler(
-        arm_names=["mutation", "crossover", "random_new"],
-        discount=0.9,  # 10% decay per update
+        arm_names=["simplify", "crossover", "random_new"],
+        discount=0.9,
+        tau_max=0.15,
+        epsilon_exploration=0.1,  # 10% random arm selection
     )
     
-    # Select an arm
     arm, theta = bandit.select_arm()
-    print(f"Selected: {arm} with θ={theta:.4f}")
-    
-    # Update with observed reward
     bandit.update(arm, reward=0.5)
-    
-    # Get current state for logging
     state = bandit.get_state_snapshot()
 """
 
@@ -87,35 +77,38 @@ class ArmState:
 
 
 class DiscountedThompsonSampler:
-    """D-TS bandit with Gaussian priors for adaptive operator selection.
+    """D-TS bandit following Qi et al. (2023) Algorithm 1.
     
-    This bandit learns which operator (mutation, crossover, random_new) produces
-    the best offspring over time, adapting to non-stationary reward distributions
-    through exponential discounting.
+    Uses Discounted Thompson Sampling with Gaussian priors for adaptive
+    operator selection. Includes an epsilon-greedy exploration floor to
+    prevent permanent arm extinction in low-budget settings.
     
     The algorithm:
-        1. For each arm, maintain a posterior distribution N(μ, τ²)
-        2. Sample θ ~ N(μ, τ²) for each arm
-        3. Select the arm with highest θ (Thompson Sampling)
+        1. With probability epsilon, select a random arm (exploration floor)
+        2. Otherwise, for each arm sample theta ~ N(mu_hat, tau^2)
+           where mu_hat = discounted_sum / discounted_count
+           and tau = min(1/sqrt(discounted_count), tau_max)
+        3. Select the arm with highest theta (Thompson Sampling)
         4. After observing reward, update statistics with discount
     
     Args:
-        arm_names: List of operator names (e.g., ["mutation", "crossover", "random_new"])
-        discount: Exponential discount factor γ ∈ (0, 1]. Lower = faster adaptation.
-                  Default 0.9 means each observation loses 10% weight per new update.
-        prior_mean: Prior mean for arm rewards (μ₀). Default 0.0.
-        prior_variance: Prior variance for arm rewards (σ₀²). Default 1.0.
-        reward_variance: Expected variance of observed rewards (σ²). Default 1.0.
-        tau_max: Maximum posterior standard deviation (caps exploration). Default 5.0.
-        epsilon: Small constant for numerical stability. Default 1e-6.
+        arm_names: List of operator names
+        discount: Exponential discount factor gamma in (0, 1]. Lower = faster adaptation.
+        tau_max: Maximum sampling standard deviation (caps exploration).
+                 Paper recommends tau_max ~ mu_max/5.
+        epsilon_exploration: Probability of selecting a random arm instead of
+                           using Thompson Sampling. Prevents arm extinction.
+                           0.0 = pure TS (default), 0.1 = 10% random.
+        epsilon: Small constant for numerical stability.
     
     Example:
         >>> bandit = DiscountedThompsonSampler(
-        ...     arm_names=["mutation", "crossover", "random_new"],
+        ...     arm_names=["simplify", "crossover", "random_new"],
         ...     discount=0.9,
+        ...     tau_max=0.15,
+        ...     epsilon_exploration=0.1,
         ... )
         >>> arm, theta = bandit.select_arm()
-        >>> # ... apply operator and observe reward ...
         >>> bandit.update(arm, reward=0.3)
     """
 
@@ -123,26 +116,27 @@ class DiscountedThompsonSampler:
         self,
         arm_names: List[str],
         discount: float = 0.9,
+        tau_max: float = 0.15,
+        epsilon_exploration: float = 0.0,
+        epsilon: float = 1e-6,
+        # Backward-compatible: accept but ignore old Bayesian params
         prior_mean: float = 0.0,
         prior_variance: float = 1.0,
         reward_variance: float = 1.0,
-        tau_max: float = 5.0,
-        epsilon: float = 1e-6,
+        **kwargs,
     ):
         # Validate parameters
         if not 0 < discount <= 1:
             raise ValueError("discount must be in (0, 1].")
-        if prior_variance <= 0:
-            raise ValueError("prior_variance must be positive.")
         if tau_max <= 0:
             raise ValueError("tau_max must be positive.")
+        if not 0 <= epsilon_exploration <= 1:
+            raise ValueError("epsilon_exploration must be in [0, 1].")
 
         self.arm_names = arm_names
         self.discount = discount
-        self.prior_mean = prior_mean
-        self.prior_variance = prior_variance
-        self.reward_variance = reward_variance
         self.tau_max = tau_max
+        self.epsilon_exploration = epsilon_exploration
         self.epsilon = epsilon
 
         # Initialize arm states
@@ -150,33 +144,39 @@ class DiscountedThompsonSampler:
         self.total_pulls = 0
 
     def select_arm(self) -> Tuple[str, float]:
-        """Sample an arm according to Thompson Sampling.
+        """Select an arm using Thompson Sampling with epsilon-greedy floor.
         
-        For each arm, samples θ from the posterior distribution and
-        selects the arm with the highest sampled value.
+        With probability epsilon_exploration, selects a random arm.
+        Otherwise, samples theta from each arm's posterior and picks
+        the arm with the highest sampled value.
         
         Returns:
             Tuple of (selected_arm_name, sampled_theta_value)
-            
-        Note:
-            The returned theta value is useful for logging to understand
-            which arm the bandit believed was best at decision time.
         """
+        # Epsilon-greedy exploration floor
+        if self.epsilon_exploration > 0 and random.random() < self.epsilon_exploration:
+            chosen_arm = random.choice(self.arm_names)
+            # Still compute posteriors and sample theta for logging
+            for arm_name, arm_state in self.arms.items():
+                self._update_posterior(arm_state)
+                std_dev = math.sqrt(max(self.epsilon, arm_state.posterior_var))
+                arm_state.last_theta = random.gauss(arm_state.posterior_mean, std_dev)
+            self.total_pulls += 1
+            return chosen_arm, self.arms[chosen_arm].last_theta
+
+        # Thompson Sampling: sample theta for each arm, pick highest
         best_arm = self.arm_names[0]
         best_theta = float("-inf")
 
         for arm_name, arm_state in self.arms.items():
-            # Update posterior statistics before sampling
             self._update_posterior(arm_state)
 
-            # Sample θ ~ N(μ̂, τ²)
+            # Sample theta ~ N(mu_hat, tau^2) per Algorithm 1 line 5
             std_dev = math.sqrt(max(self.epsilon, arm_state.posterior_var))
-            std_dev = min(std_dev, self.tau_max)  # Cap exploration
             theta = random.gauss(arm_state.posterior_mean, std_dev)
 
             arm_state.last_theta = theta
 
-            # Select arm with maximum sampled value
             if theta > best_theta:
                 best_theta = theta
                 best_arm = arm_name
@@ -249,33 +249,16 @@ class DiscountedThompsonSampler:
             arm_state.discounted_sum_sq *= self.discount
 
     def _update_posterior(self, arm_state: ArmState) -> None:
-        """Update posterior mean and variance using Bayesian update.
+        """Update posterior mean and variance using the paper's formula.
         
-        Combines the prior distribution with observed data to compute
-        the posterior distribution for the arm's expected reward.
+        Following Qi et al. Algorithm 1 (lines 11-12):
+            mu_hat = discounted_sum / discounted_count
+            tau    = min(1/sqrt(discounted_count), tau_max)
         """
         count = max(self.epsilon, arm_state.discounted_count)
-        sample_mean = arm_state.discounted_sum / count
 
-        # Compute observed variance
-        if arm_state.discounted_count <= self.epsilon:
-            observed_var = self.reward_variance
-        else:
-            mean_sq = sample_mean**2
-            moment = arm_state.discounted_sum_sq / count
-            observed_var = max(
-                self.epsilon,
-                moment - mean_sq if moment > mean_sq else self.reward_variance,
-            )
+        # Paper Algorithm 1, line 11: mu_hat = mu~/N
+        arm_state.posterior_mean = arm_state.discounted_sum / count
 
-        # Bayesian update: posterior = prior + likelihood
-        inv_prior = 1.0 / self.prior_variance
-        inv_likelihood = count / max(self.epsilon, observed_var)
-        posterior_var = 1.0 / max(self.epsilon, inv_prior + inv_likelihood)
-        posterior_var = min(self.tau_max**2, posterior_var)
-        posterior_mean = posterior_var * (
-            self.prior_mean * inv_prior + sample_mean * inv_likelihood
-        )
-
-        arm_state.posterior_mean = posterior_mean
-        arm_state.posterior_var = posterior_var
+        # Paper Algorithm 1, line 12: tau = min(1/sqrt(N), tau_max)
+        arm_state.posterior_var = min(1.0 / count, self.tau_max**2)

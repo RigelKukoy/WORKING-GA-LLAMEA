@@ -1,15 +1,14 @@
 """
-GA-LLAMEA 3-Arm vs 4-Arm Comparison Experiment
-==============================================
+GA-LLAMEA Crossover vs No Crossover Comparison Experiment
+=========================================================
 
-This script compares GA-LLAMEA with 3 arms (baseline) vs 4 arms (with refine_weakness).
+This script compares GA-LLAMEA with crossover (baseline) vs without crossover.
 
-The goal is to test whether the new refine_weakness operator reduces the DE monoculture
-problem by providing per-instance performance feedback to the LLM.
+The goal is to test the impact of the crossover operator on the performance of GA-LLAMEA.
 
 Configurations:
-- GA-LLAMEA-3arm: simplify, crossover, random_new (baseline)
-- GA-LLAMEA-4arm: simplify, crossover, random_new, refine_weakness (new)
+- GA-LLAMEA-Crossover: simplify, crossover, random_new (baseline)
+- GA-LLAMEA-No-Crossover: simplify, random_new
 
 Both configurations use:
 - Modified random_new with minimal skeleton (no full code reference)
@@ -27,10 +26,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import numpy as np
 
-# Import GA_LLaMEA from the modular package
-# NOTE: This assumes ga_llamea_modular is in the Python path
-# If not, add: sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'ga_llamea_modular'))
-from ga_llamea_modular import GA_LLaMEA
+from iohblade.methods import GA_LLaMEA_Method
 
 
 if __name__ == "__main__":
@@ -46,12 +42,12 @@ if __name__ == "__main__":
     llm = Gemini_LLM(api_key, ai_model)
     
     # Experiment Configuration
-    budget = 100  # LLM queries per run (increased from 20 for meaningful evolution)
-    num_runs = 3  # Multiple runs for statistical significance
+    budget = 100  # LLM queries per run
+    num_runs = 5  # Multiple runs for statistical significance
     seeds = [0 + i for i in range(num_runs)]  # Seeds: [0, 1, 2, 3, 4]
 
     print("=" * 80)
-    print("GA-LLAMEA 3-Arm vs 4-Arm Comparison Experiment")
+    print("GA-LLAMEA Crossover vs No Crossover Comparison Experiment")
     print("=" * 80)
     print(f"Budget: {budget} LLM queries per run")
     print(f"Runs: {num_runs}")
@@ -59,49 +55,45 @@ if __name__ == "__main__":
     print(f"LLM: {ai_model}")
     print()
 
-    # 1. GA-LLAMEA with 3 arms (baseline)
+    # 1. GA-LLAMEA with crossover (baseline)
     # Uses: simplify, crossover, random_new
-    # This is the original configuration without the refine_weakness operator
-    GA_LLaMEA_3arm = GA_LLaMEA(
+    GA_LLaMEA_crossover = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        solution_class=Solution,
-        name="GA-LLAMEA-3arm",
+        name="GA-LLAMEA-Crossover",
         n_parents=4,
         n_offspring=8,
         elitism=True,
         discount=0.9,
         tau_max=0.1,
-        arm_names=["simplify", "crossover", "random_new"]  # Explicit 3-arm config
+        arm_names=["simplify", "crossover", "random_new"]
     )
-    print("✓ Configured GA-LLAMEA-3arm (baseline)")
+    print("✓ Configured GA-LLAMEA-Crossover (baseline)")
     print("  Arms: simplify, crossover, random_new")
     print()
 
-    # 2. GA-LLAMEA with 4 arms (new)
-    # Uses: simplify, crossover, random_new, refine_weakness
-    # This includes the new operator that shows per-instance performance
-    GA_LLaMEA_4arm = GA_LLaMEA(
+    # 2. GA-LLAMEA without crossover
+    # Uses: simplify, random_new
+    GA_LLaMEA_no_crossover = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        solution_class=Solution,
-        name="GA-LLAMEA-4arm",
+        name="GA-LLAMEA-No-Crossover",
         n_parents=4,
         n_offspring=8,
         elitism=True,
         discount=0.9,
         tau_max=0.1,
-        arm_names=["simplify", "crossover", "random_new", "refine_weakness"]  # 4-arm config
+        arm_names=["simplify", "random_new"]
     )
-    print("✓ Configured GA-LLAMEA-4arm (with refine_weakness)")
-    print("  Arms: simplify, crossover, random_new, refine_weakness")
+    print("✓ Configured GA-LLAMEA-No-Crossover")
+    print("  Arms: simplify, random_new")
     print()
 
-    methods = [GA_LLaMEA_3arm, GA_LLaMEA_4arm]
+    methods = [GA_LLaMEA_crossover, GA_LLaMEA_no_crossover]
     
     # Generate a unique directory for this experiment run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_dir = f"results/3ARM-VS-4ARM_{timestamp}"
+    experiment_dir = f"results/CROSSOVER-VS-NO-CROSSOVER_{timestamp}"
     logger = ExperimentLogger(experiment_dir)
     
     print(f"Results will be saved to: {experiment_dir}")
@@ -204,6 +196,6 @@ if __name__ == "__main__":
     print("Next steps:")
     print(f"1. Analyze results in: {experiment_dir}")
     print(f"2. View IOH data in: {ioh_dir}")
-    print("3. Compare algorithm diversity between 3-arm and 4-arm configurations")
-    print("4. Check if 4-arm reduces DE monoculture problem")
+    print("3. Compare algorithm diversity between Crossover and No-Crossover configurations")
+    print("4. Check the impact of the crossover operator on the performance of GA-LLAMEA")
     print()

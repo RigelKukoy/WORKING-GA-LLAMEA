@@ -116,10 +116,11 @@ class GA_LLaMEA:
         n_offspring: int = 16,
         elitism: bool = True,
         discount: float = 0.9,
-        tau_max: float = 0.1,
-        prior_variance: float = 0.25,
-        reward_variance: float = 0.5,
+        tau_max: float = 0.10,
+        epsilon_exploration: float = 0.05,
         arm_names: Optional[List[str]] = None,
+        always_select_best: bool = False,
+        use_init_prompt_for_random_new: bool = False,
         **kwargs,
     ):
         """Initialize GA-LLAMEA.
@@ -128,8 +129,7 @@ class GA_LLaMEA:
             llm: LLM instance for code generation. Must have query() method.
                  BLADE's LLM classes (Gemini_LLM, OpenAI_LLM, etc.) work directly.
             
-            budget: Total number of LLM queries allowed. This controls experiment
-                    duration: more budget = more algorithms evaluated.
+            budget: Total number of LLM queries allowed.
             
             solution_class: Solution class to use for storing algorithms.
                            Pass BLADE's Solution class: `solution_class=Solution`
@@ -137,32 +137,22 @@ class GA_LLaMEA:
             
             name: Method name for logging and identification.
             
-            n_parents: Population size (μ). Number of solutions in the population.
-                      Larger = more diversity, but more evaluations needed.
+            n_parents: Population size (mu). Default 4.
             
-            n_offspring: Offspring per generation (λ). Number of new algorithms
-                        generated each generation before selection.
+            n_offspring: Offspring per generation (lambda). Default 16.
             
-            elitism: Selection strategy.
-                    True = (μ+λ): Select from parents + offspring (preserves best)
-                    False = (μ,λ): Select only from offspring (more exploration)
+            elitism: True = (mu+lambda) selection, False = (mu,lambda).
             
-            discount: D-TS discount factor γ ∈ (0, 1]. Controls adaptation speed.
-                     Lower = faster adaptation to changing reward distributions.
-                     0.9 is a good default (10% decay per observation).
+            discount: D-TS discount factor gamma in (0, 1]. Default 0.9.
             
-            tau_max: Maximum posterior std dev for D-TS. Caps exploration.
-                     Calibrated for normalized binary rewards {0.0, 1/3, 1.0}
-                     following the D-TS paper: tau_max ~ mu_max/3 where
-                     mu_max ~ 0.2-0.4. Default 0.1 balances exploration vs
-                     exploitation.
+            tau_max: Maximum sampling std dev for D-TS. Paper recommends
+                     tau_max ~ mu_max/5. Default 0.15.
             
-            prior_variance: Prior variance for arm rewards. Calibrated for
-                           normalized [0,1] binary reward scale. Default 0.25.
+            epsilon_exploration: Probability of random arm selection (exploration
+                               floor). Prevents permanent arm extinction.
+                               0.0 = pure TS, 0.1 = 10% random. Default 0.1.
             
-            reward_variance: Expected variance of rewards. Calibrated for
-                            normalized binary reward scale {0.0, 1/3, 1.0}.
-                            Default 0.5.
+            arm_names: List of operator arm names. Default: ["simplify", "crossover", "random_new"].
             
             **kwargs: Additional arguments stored but not used directly.
         """
@@ -172,6 +162,7 @@ class GA_LLaMEA:
         self.n_parents = n_parents
         self.n_offspring = n_offspring
         self.elitism = elitism
+        self.always_select_best = always_select_best
         self.kwargs = kwargs
 
         # Solution factory
@@ -187,14 +178,13 @@ class GA_LLaMEA:
             arm_names=arm_names,
             discount=discount,
             tau_max=tau_max,
-            prior_variance=prior_variance,
-            reward_variance=reward_variance,
+            epsilon_exploration=epsilon_exploration,
         )
 
         # Initialize operators
         self._simplify = SimplifyOperator()
         self._crossover = CrossoverOperator()
-        self._random_new = RandomNewOperator()
+        self._random_new = RandomNewOperator(use_init_prompt=use_init_prompt_for_random_new)
         self._refine_weakness = WeaknessRefinementOperator()
 
         # State
@@ -485,6 +475,9 @@ class GA_LLaMEA:
         Args:
             tournament_size: Number of candidates to compare. Default 2 (binary).
         """
+        if self.always_select_best:
+            return max(self.population, key=lambda s: s.fitness)
+
         candidates = random.sample(
             self.population, min(tournament_size, len(self.population))
         )

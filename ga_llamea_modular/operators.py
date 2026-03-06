@@ -262,8 +262,7 @@ Alternative approach for inspiration: "{parent2.name}" (fitness: {parent2.fitnes
 """
         instruction = f"""Create an improved algorithm by redesigning the working algorithm above.
 Draw inspiration from the alternative approach "{parent2.name}" — think about what strategic concept it might use that could address a weakness in the working algorithm.
-Write a clean implementation from scratch. Do not copy-paste code.
-Use only numpy. Keep it simple and functional."""
+Write a clean implementation from scratch."""
         
         return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
 
@@ -360,6 +359,15 @@ class RandomNewOperator(BaseOperator):
         5. Output format
     """
     
+    def __init__(self, use_init_prompt: bool = False):
+        """Initialize random new operator.
+        
+        Args:
+            use_init_prompt: If True, uses the exact same prompt as initialization
+                             (no history, no structural reference).
+        """
+        self.use_init_prompt = use_init_prompt
+
     @property
     def name(self) -> str:
         return "random_new"
@@ -388,7 +396,7 @@ class RandomNewOperator(BaseOperator):
         
         is_init = kwargs.get("is_init", False)
 
-        if is_init:
+        if is_init or self.use_init_prompt:
             instruction = ""
             history = "" # No history for initialization
             # Avoid extra newlines when instruction and history are empty

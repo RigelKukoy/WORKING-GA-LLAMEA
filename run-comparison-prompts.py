@@ -18,7 +18,7 @@ if __name__ == "__main__":
     llm = Gemini_LLM(api_key, ai_model)
     budget = 100 
     
-    num_runs = 10
+    num_runs = 3
     # Generates seeds starting from 4: [4, 5, 6, ...]
     seeds = [0 + i for i in range(num_runs)]
 
@@ -52,27 +52,33 @@ if __name__ == "__main__":
         elitism=True
     )
 
-    # 3. GA-LLAMEA Improved (concept-level crossover, binary rewards, calibrated D-TS)
-    GA_LLaMEA_Baseline = GA_LLaMEA_Method(
+    # 3. GA-LLAMEA with Init Prompt for Random New
+    GA_LLaMEA_InitPrompt = GA_LLaMEA_Method(
         llm, 
         budget=budget, 
-        name="GA-LLAMEA-Improved", 
+        name="GA-LLAMEA-InitPrompt", 
         n_parents=4, 
         n_offspring=8, 
         elitism=True, 
         discount=0.9, 
-        tau_max=0.1
+        tau_max=0.1,
+        use_init_prompt_for_random_new=True
     )
 
-    # 4. EoH
-    eoh_method = EoH(
-        llm,
-        budget=budget,
-        name="EoH",
-        pop_size=4
+    # 4. GA-LLAMEA with Original Prompt for Random New
+    GA_LLaMEA_OriginalPrompt = GA_LLaMEA_Method(
+        llm, 
+        budget=budget, 
+        name="GA-LLAMEA-OriginalPrompt", 
+        n_parents=4, 
+        n_offspring=8, 
+        elitism=True, 
+        discount=0.9, 
+        tau_max=0.1,
+        use_init_prompt_for_random_new=False
     )
 
-    methods = [GA_LLaMEA_Baseline]
+    methods = [GA_LLaMEA_InitPrompt, GA_LLaMEA_OriginalPrompt]
     
     # Generate a unique directory for this experiment run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -80,6 +86,9 @@ if __name__ == "__main__":
     logger = ExperimentLogger(experiment_dir)
     
     print(f"Starting Comparison Experiment: GA-LLAMEA only. Results will be saved to {experiment_dir}")
+    training_instances = list(range(0, 20))
+    test_instances = list(range(20, 70))
+
     experiment = MA_BBOB_Experiment(
         methods=methods, 
         runs=num_runs, 
@@ -87,9 +96,11 @@ if __name__ == "__main__":
         dims=[5], 
         budget_factor=2000, 
         budget=budget, 
-        eval_timeout=300, 
+        eval_timeout=400, 
         show_stdout=True, 
-        exp_logger=logger
+        exp_logger=logger,
+        training_instances=training_instances,
+        test_instances=test_instances,
     ) 
     experiment()
 
@@ -106,7 +117,12 @@ if __name__ == "__main__":
             print("No experiment data found, skipping IOH generation.")
         else:
             # Create a fresh MA_BBOB problem for test evaluation
-            problem = MA_BBOB(dims=[5], budget_factor=2000)
+            problem = MA_BBOB(
+                dims=[5],
+                budget_factor=2000,
+                training_instances=training_instances,
+                test_instances=test_instances,
+            )
             problem._ensure_env()
 
             for _, row in exp_data.iterrows():
@@ -128,8 +144,10 @@ if __name__ == "__main__":
 
                 print(f"  Testing {method_name} seed={seed} ({solution.name})...")
                 try:
-                    problem.test(solution, ioh_dir=ioh_dir)
-                    print(f"    IOH data written for {solution.name}")
+                    for test_seed in range(5):
+                        np.random.seed(test_seed)
+                        problem.test(solution, ioh_dir=ioh_dir)
+                    print(f"    IOH data written for {solution.name} (5 seeds, 50 instances)")
                 except Exception as e:
                     print(f"    Failed to generate IOH data for {solution.name}: {e}")
 
