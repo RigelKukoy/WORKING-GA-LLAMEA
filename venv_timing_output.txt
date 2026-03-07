@@ -1,0 +1,35 @@
+======================================================================
+TEST 1: Virtual environment creation speed
+======================================================================
+  Import virtualenv: 0.26s
+  Creating venv at: C:\Users\Kukoy\AppData\Local\Temp\blade_test_env_yt6fm2p3
+  Venv creation: 2.11s
+  Python bin: C:\Users\Kukoy\AppData\Local\Temp\blade_test_env_yt6fm2p3\Scripts\python
+  Exists: False
+
+======================================================================
+TEST 2: Installing dependencies into venv
+======================================================================
+  pip install time: 119.49s
+  Return code: 0
+  Success! (stdout last 200 chars): ...n-1.8.0 scipy-1.17.1 six-1.17.0 smac-2.3.1 sortedcontainers-2.4.0 tblib-3.2.2 threadpoolctl-3.6.0 toolz-1.1.0 tornado-6.5.4 typing_extensions-4.15.0 tzdata-2025.3 urllib3-2.6.3 zict-3.0.0 zipp-3.23.0
+
+
+======================================================================
+TEST 3: Running a simple Python script in venv
+======================================================================
+  Simple script time: 1.37s
+  stdout: numpy version: 2.4.2
+OK
+
+======================================================================
+TEST 4: Running MA_BBOB evaluation in subprocess (like problem.py does)
+======================================================================
+  Total wall time: 5.85s
+  stdout: Starting eval in subprocess...
+  ioh import: 0.18s
+  Data loaded: 2.94s
+  Total eval in subprocess: 5.65s
+SUBPROCESS_DONE
+
+Done! Cleaned up venv.

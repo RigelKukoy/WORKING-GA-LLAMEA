@@ -1,0 +1,20 @@
+
+=== run-GA-LLAMEA-InitPrompt-MA_BBOB-0 ===
+  [0] gen=0 fitness=-inf name=QESO
+       error: In the code, line 136, in __call__, the following error occurred:
+ValueError: operands could not be broadcast together with shapes (4,) (2,) 
+On line: self.sigma = np.ones(self.pop_size) * initial_sigma_value
+  [1] gen=0 fitness=-inf name=DifferentialRepulsionSwarmOptimization
+       error: Evaluation timed out after 1200 seconds.
+  [2] gen=0 fitness=-inf name=AdaptiveFireflySwarmOptimization
+       error: Evaluation timed out after 1200 seconds.
+  [3] gen=0 fitness=-inf name=AdaptiveCollectiveIntelligenceOptimization
+       error: Evaluation timed out after 1200 seconds.
+
+=== run-GA-LLAMEA-InitPrompt-MA_BBOB-1 ===
+  [0] gen=0 fitness=-inf name=AdaptiveIteratedLocalSearch
+       error: Evaluation timed out after 1200 seconds.
+  [1] gen=0 fitness=-inf name=DynamicSwarmQuantumPerturbation
+       error: Evaluation timed out after 1200 seconds.
+  [2] gen=0 fitness=-inf name=StarlightOptimizer
+       error: Evaluation timed out after 1200 seconds.

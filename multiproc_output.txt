@@ -1,0 +1,37 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "C:\Program Files\Python311\Lib\multiprocessing\spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\multiprocessing\spawn.py", line 131, in _main
+    prepare(preparation_data)
+  File "C:\Program Files\Python311\Lib\multiprocessing\spawn.py", line 246, in prepare
+    _fixup_main_from_path(data['init_main_from_path'])
+  File "C:\Program Files\Python311\Lib\multiprocessing\spawn.py", line 297, in _fixup_main_from_path
+    main_content = runpy.run_path(main_path,
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen runpy>", line 291, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\test_multiproc.py", line 81, in <module>
+    result = problem(solution)
+             ^^^^^^^^^^^^^^^^^
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\iohblade\problem.py", line 323, in __call__
+    process.join()
+  File "C:\Program Files\Python311\Lib\multiprocessing\process.py", line 148, in join
+    assert self._popen is not None, 'can only join a started process'
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: can only join a started process
+TEST 1: Pickle size
+  Pickle size: 558.2 KB
+  Pickle time: 0.00s
+  Unpickle time: 0.00s
+
+TEST 2: _ensure_env
+  _ensure_env: 111.19s
+  _env_path: C:\Users\Kukoy\AppData\Local\Temp\blade_env_z84l6ciz
+
+  Pickle size (with env): 558.4 KB
+  Pickle time (with env): 0.00s
+
+TEST 3: Full problem(solution) call with multiprocessing

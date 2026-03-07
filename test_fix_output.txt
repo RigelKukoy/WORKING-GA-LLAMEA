@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+Creating MA_BBOB problem (dims=[5], budget_factor=800, eval_timeout=60)...
+Setting up venv (this takes ~2 min for pip install)...
+  Venv ready in 109.0s
+
+Evaluating RandomSearch through problem(solution)...
+
+============================================================
+Result:
+  Time:     16.01s
+  Fitness:  0.18066369698334486
+  Error:    
+  Feedback: The algorithm RandomSearch scored 0.181 on AOCC (higher is better, 1.0 is the best).
+============================================================
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\test_fix.py", line 69, in <module>
+    print("\n\u2713 FIX VERIFIED: Algorithm evaluated successfully!")
+  File "C:\Program Files\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 2: character maps to <undefined>

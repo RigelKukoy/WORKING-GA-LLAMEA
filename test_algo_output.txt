@@ -1,0 +1,12 @@
+
+======================================================================
+Testing algorithm [1]: DifferentialRepulsionSwarmOptimization
+======================================================================
+  Step 1: Small test run (dim=2, budget=100)...
+    OK in 0.07s
+  Step 2: Single instance (dim=5, budget=4000)...
+    OK in 0.56s  AUC=0.1486
+
+  NOTE: Only tested first timed-out algorithm. Check if it's slow or fast.
+
+Done!

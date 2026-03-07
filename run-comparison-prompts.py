@@ -14,7 +14,7 @@ if __name__ == "__main__":
     load_dotenv()
 
     api_key = os.getenv("GEMINI_API_KEY")
-    ai_model = "gemini-2.0-flash"
+    ai_model = "gemini-2.5-flash"
     llm = Gemini_LLM(api_key, ai_model)
     budget = 100 
     
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     
     print(f"Starting Comparison Experiment: GA-LLAMEA only. Results will be saved to {experiment_dir}")
     training_instances = list(range(0, 20))
-    test_instances = list(range(20, 70))
+    test_instances = list(range(20, 120))
 
     experiment = MA_BBOB_Experiment(
         methods=methods, 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         dims=[5], 
         budget_factor=2000, 
         budget=budget, 
-        eval_timeout=400, 
+        eval_timeout=300, 
         show_stdout=True, 
         exp_logger=logger,
         training_instances=training_instances,

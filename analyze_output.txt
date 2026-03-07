@@ -1,0 +1,71 @@
+
+=== run-GA-LLAMEA-InitPrompt-MA_BBOB-0 ===
+  [0] gen=0 fitness=-inf name=AdaptiveQuantumSwarmOptimizer
+       error: Evaluation timed out after 500 seconds.
+  [1] gen=0 fitness=-inf name=AdaptiveMycelialExploration
+       error: Evaluation timed out after 500 seconds.
+  [2] gen=0 fitness=-inf name=AdaptiveMomentumSwarmOptimization
+       error: Evaluation timed out after 500 seconds.
+  [3] gen=0 fitness=-inf name=AdaptiveBlendedSwarmDE
+       error: Evaluation timed out after 500 seconds.
+
+=== run-GA-LLAMEA-InitPrompt-MA_BBOB-1 ===
+  [0] gen=0 fitness=-inf name=CoherentSearchSwarmOptimizer
+       error: In the code, line 386, in full, the following error occurred:
+ValueError: could not broadcast input array from shape (2,) into shape (20,)
+  [1] gen=0 fitness=-inf name=CognitiveSwarmAdaptiveDrift
+       error: Evaluation timed out after 500 seconds.
+  [2] gen=0 fitness=-inf name=QuantumDifferentialWaveOptimizer
+       error: Evaluation timed out after 500 seconds.
+  [3] gen=0 fitness=-inf name=AdaptiveDiffusiveSwarmOptimization
+       error: In the code, line 212, in __call__, the following error occurred:
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+On line: refinement_step_size 
+
+=== run-GA-LLAMEA-InitPrompt-MA_BBOB-2 ===
+  [0] gen=0 fitness=-inf name=QuantumInspiredSwarmOptimizer
+       error: Evaluation timed out after 500 seconds.
+  [1] gen=0 fitness=-inf name=AdaptiveGaussianSwarmOptimizer
+       error: Evaluation timed out after 500 seconds.
+  [2] gen=0 fitness=-inf name=AdaptiveRadialSearchSwarm
+       error: In the code, line 386, in full, the following error occurred:
+ValueError: could not broadcast input array from shape (2,) into shape (5,)
+  [3] gen=0 fitness=-inf name=AdaptiveDiffusionSwarmOptimizer
+       error: Evaluation timed out after 500 seconds.
+
+=== run-GA-LLAMEA-OriginalPrompt-MA_BBOB-0 ===
+  [0] gen=0 fitness=-inf name=ChaoticPulsarOptimization
+       error: Evaluation timed out after 500 seconds.
+  [1] gen=0 fitness=-inf name=HierarchicalDiffusionSearch
+       error: In the code, line 105, in __call__, the following error occurred:
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+On line: current_diffusion_sca
+  [2] gen=0 fitness=-inf name=AdaptiveDirectionalSwarmOptimizer
+       error: In the code, line 386, in full, the following error occurred:
+ValueError: could not broadcast input array from shape (2,) into shape (20,)
+  [3] gen=0 fitness=-inf name=HierarchicalSubspaceEvolution
+       error: Evaluation timed out after 500 seconds.
+
+=== run-GA-LLAMEA-OriginalPrompt-MA_BBOB-1 ===
+  [0] gen=0 fitness=-inf name=ACSO
+       error: Evaluation timed out after 500 seconds.
+  [1] gen=0 fitness=-inf name=ADASON
+       error: In the code, line 238, in _add_to_archive, the following error occurred:
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+On line: if np.linalg.n
+  [2] gen=0 fitness=-inf name=AdaptiveCulturalGradientDiffusion
+       error: In the code, line 386, in full, the following error occurred:
+ValueError: could not broadcast input array from shape (2,) into shape (10,)
+  [3] gen=0 fitness=-inf name=AdaptiveDiffusionSwarmOptimization
+       error: In the code, line 386, in full, the following error occurred:
+ValueError: could not broadcast input array from shape (2,) into shape (6,)
+
+=== run-GA-LLAMEA-OriginalPrompt-MA_BBOB-2 ===
+  [0] gen=0 fitness=-inf name=EntangledPopulationOptimizer
+       error: Evaluation timed out after 500 seconds.
+  [1] gen=0 fitness=-inf name=AdaptiveGradientFreeExplorerSwarm
+       error: Evaluation timed out after 500 seconds.
+  [2] gen=0 fitness=-inf name=AdaptiveNichePreservingOptimizer
+       error: Evaluation timed out after 500 seconds.
+  [3] gen=0 fitness=-inf name=AdaptiveSynapticParticleOptimization
+       error: Evaluation timed out after 500 seconds.

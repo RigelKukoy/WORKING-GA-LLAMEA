@@ -245,60 +245,79 @@ class Problem(ABC):
                 )
                 return solution  # Return early if budget is exhausted
 
-        # solution = self.evaluate(solution) #old fashioned way
-        # Else create a new process for evaluation with timeout
+        # Evaluate in a subprocess running inside the dedicated virtual environment.
+        # We call subprocess.Popen directly (no multiprocessing.Process wrapper)
+        # to avoid deadlocks on Windows caused by spawn-mode re-importing.
         stdout = ""
         stderr = ""
         self._last_stdout = ""
         self._last_stderr = ""
-        process: multiprocessing.Process | None = None
-        parent_conn = None
-        child_conn = None
+        proc = None
         try:
             self._ensure_env()
-            (
-                parent_conn,
-                child_conn,
-            ) = multiprocessing.Pipe()  # Create pipe for communication
-            process = multiprocessing.Process(
-                target=evaluate_in_subprocess, args=(self, child_conn, solution)
-            )
-            process.start()
-            process.join(
-                timeout=self.eval_timeout + 60
-            )  # We allow 1 minute for setting up the environment.
+            env_path = self._env_path
+            python_bin = self._python_bin
 
-            if process.is_alive():
+            problem_pickle = env_path / "problem.pkl"
+            solution_pickle = env_path / f"solution_{uuid.uuid4().hex}.pkl"
+            result_pickle = (
+                Path(tempfile.gettempdir()) / f"blade_result_{uuid.uuid4().hex}.pkl"
+            )
+            problem_copy = copy.deepcopy(self)
+            problem_copy.logger = None
+            if not os.path.exists(problem_pickle):
+                with open(problem_pickle, "wb") as f:
+                    cloudpickle.dump(problem_copy, f)
+            with open(solution_pickle, "wb") as f:
+                cloudpickle.dump(solution, f)
+
+            script_path = env_path / "run_eval.py"
+            imports_block = getattr(self, "imports", "")
+            script_path.write_text(
+                (f"{imports_block}\n" if imports_block else "")
+                + "import cloudpickle as cp\n"
+                + "import os, json\n"
+                + f"problem_path = {json.dumps(str(problem_pickle))}\n"
+                + f"solution_path = {json.dumps(str(solution_pickle))}\n"
+                + f"result_path  = {json.dumps(str(result_pickle))}\n"
+                + "problem=cp.load(open(problem_path,'rb'))\n"
+                + "solution=cp.load(open(solution_path,'rb'))\n"
+                + "result=problem.evaluate(solution)\n"
+                + "with open(result_path,'wb') as f:\n"
+                + "    cp.dump(result, f)\n"
+            )
+
+            env = os.environ.copy()
+            repo_root = Path(__file__).resolve().parents[1]
+            env["PYTHONPATH"] = f"{repo_root}{os.pathsep}" + env.get("PYTHONPATH", "")
+
+            proc = subprocess.Popen(
+                [str(python_bin), str(script_path)],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            try:
+                stdout, stderr = proc.communicate(timeout=self.eval_timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
                 raise TimeoutException(
                     f"Evaluation timed out after {self.eval_timeout} seconds."
                 )
-            if parent_conn.poll():
-                result = parent_conn.recv()
-                if isinstance(result, dict):
-                    stdout = result.get("stdout", "")
-                    stderr = result.get("stderr", "")
-                    if "error" in result:
-                        err = result["error"]
-                        solution.set_scores(
-                            -np.inf,
-                            feedback=err,
-                            error=err,
-                        )
-                    else:
-                        data = result.get("result")
-                        if isinstance(data, Solution):
-                            solution = data
-                        elif isinstance(data, str):
-                            solution.set_scores(
-                                -np.inf,
-                                feedback=data,
-                                error=data,
-                            )
-                        else:
-                            raise Exception("No Solution object or string returned.")
-                elif isinstance(result, Exception):
-                    raise result
-                elif isinstance(result, Solution):
+
+            if proc.returncode != 0:
+                error_msg = simplify_subprocess_error(stderr, solution)
+                solution.set_scores(
+                    -np.inf,
+                    feedback=error_msg,
+                    error=error_msg,
+                )
+            else:
+                with open(result_pickle, "rb") as f:
+                    result = cloudpickle.load(f)
+                if isinstance(result, Solution):
                     solution = result
                 elif isinstance(result, str):
                     solution.set_scores(
@@ -308,8 +327,6 @@ class Problem(ABC):
                     )
                 else:
                     raise Exception("No Solution object or string returned.")
-            else:
-                raise Exception("Evaluation failed without an exception.")
         except Exception as e:
             solution.set_scores(
                 -np.inf,
@@ -317,14 +334,17 @@ class Problem(ABC):
                 error=f"{e}",
             )
         finally:
-            if process is not None:
-                if process.is_alive():
-                    process.kill()
-                process.join()
-            if parent_conn is not None:
-                parent_conn.close()
-            if child_conn is not None:
-                child_conn.close()
+            if proc is not None and proc.poll() is None:
+                proc.kill()
+                proc.communicate()
+            # Clean up temporary pickle files
+            try:
+                if 'solution_pickle' in locals() and os.path.exists(solution_pickle):
+                    os.remove(solution_pickle)
+                if 'result_pickle' in locals() and os.path.exists(result_pickle):
+                    os.remove(result_pickle)
+            except OSError:
+                pass
 
         self._last_stdout = stdout
         self._last_stderr = stderr
