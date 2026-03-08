@@ -186,6 +186,51 @@ Code:
         return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
 
 
+class RefineOperator(BaseOperator):
+    """Refine operator: Small mutation of a single parent algorithm.
+    
+    Prompt structure:
+        1. Task description + example
+        2. Population history
+        3. Selected parent code + fitness
+        4. "Refine the strategy of the selected solution to improve it."
+        5. Output format
+    """
+    
+    @property
+    def name(self) -> str:
+        return "refine"
+    
+    def build_prompt(
+        self,
+        problem: ProblemProtocol,
+        population: List[Any],
+        parent: Any = None,
+        parent2: Any = None,
+        **kwargs
+    ) -> str:
+        """Build prompt for refine operator."""
+        if parent is None:
+            raise ValueError("Refine requires a parent solution")
+        
+        task_prompt = self._get_task_prompt(problem)
+        history = self._get_population_history(population)
+        
+        algo_details = f"""
+Selected algorithm to refine and improve:
+Name: {parent.name}
+Fitness: {parent.fitness:.4f}
+Code:
+```python
+{parent.code}
+```
+"""
+        instruction = "Refine the strategy of the selected solution to improve it."
+        
+        return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
+
+
+
 class CrossoverOperator(BaseOperator):
     """Crossover operator: Guided Concept Transfer between two parent algorithms.
     
@@ -217,6 +262,15 @@ class CrossoverOperator(BaseOperator):
         5. Output format
     """
     
+    def __init__(self, num_inspirations: int = 1):
+        """Initialize Crossover operator.
+        
+        Args:
+            num_inspirations: Number of secondary parents to draw inspiration from.
+                              Default is 1. Can be increased for more diversity.
+        """
+        self.num_inspirations = num_inspirations
+
     @property
     def name(self) -> str:
         return "crossover"
@@ -227,6 +281,7 @@ class CrossoverOperator(BaseOperator):
         population: List[Any],
         parent: Any = None,
         parent2: Any = None,
+        inspirations: List[Any] = None,
         **kwargs
     ) -> str:
         """Build prompt for crossover operator (Guided Concept Transfer).
@@ -235,22 +290,32 @@ class CrossoverOperator(BaseOperator):
             problem: Optimization problem
             population: Current population
             parent: First parent (higher fitness, provides full code)
-            parent2: Second parent (provides name/description only as inspiration)
+            parent2: Second parent for backwards compatibility
+            inspirations: List of secondary parents (provides name/description only)
             
         Returns:
             Complete crossover prompt
         """
-        if parent is None or parent2 is None:
-            raise ValueError("Crossover requires two parent solutions")
+        if parent is None:
+            raise ValueError("Crossover requires at least a primary parent solution")
+            
+        if inspirations is None:
+            if parent2 is not None:
+                inspirations = [parent2]
+            else:
+                raise ValueError("Crossover requires at least one inspiration parent")
         
         task_prompt = self._get_task_prompt(problem)
         history = self._get_population_history(population)
         
         # Only show the better parent's full code
-        # The weaker parent is described abstractly to prevent code-merging
-        parent2_description = ""
-        if hasattr(parent2, 'description') and parent2.description:
-            parent2_description = f"\nStrategy: {parent2.description}"
+        # The weaker parents are described abstractly to prevent code-merging
+        insp_texts = []
+        for i, insp in enumerate(inspirations):
+            desc = f"\nStrategy: {insp.description}" if hasattr(insp, 'description') and insp.description else ""
+            insp_texts.append(f"Alternative approach {i+1} for inspiration: \"{insp.name}\" (fitness: {insp.fitness:.4f}){desc}")
+            
+        inspirations_str = "\n".join(insp_texts)
         
         algo_details = f"""
 Working Algorithm (fitness: {parent.fitness:.4f}):
@@ -258,10 +323,18 @@ Working Algorithm (fitness: {parent.fitness:.4f}):
 {parent.code}
 ```
 
-Alternative approach for inspiration: "{parent2.name}" (fitness: {parent2.fitness:.4f}){parent2_description}
+{inspirations_str}
 """
+        
+        if len(inspirations) == 1:
+            insp_names = f'"{inspirations[0].name}"'
+            concept_text = "what strategic concept it might use that could address a weakness"
+        else:
+            insp_names = ", ".join([f'"{insp.name}"' for insp in inspirations[:-1]]) + f' and "{inspirations[-1].name}"'
+            concept_text = "what strategic concepts they might use that could address weaknesses"
+            
         instruction = f"""Create an improved algorithm by redesigning the working algorithm above.
-Draw inspiration from the alternative approach "{parent2.name}" — think about what strategic concept it might use that could address a weakness in the working algorithm.
+Draw inspiration from the alternative approach{"es" if len(inspirations)>1 else ""} {insp_names} — think about {concept_text} in the working algorithm.
 Write a clean implementation from scratch."""
         
         return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
@@ -439,6 +512,7 @@ Use a DIFFERENT strategy from the algorithms listed above. This template is only
 # Factory dictionary for easy operator instantiation
 OPERATORS = {
     "simplify": SimplifyOperator,
+    "refine": RefineOperator,
     "crossover": CrossoverOperator,
     "random_new": RandomNewOperator,
     "refine_weakness": WeaknessRefinementOperator,

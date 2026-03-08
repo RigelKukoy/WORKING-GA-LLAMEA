@@ -175,6 +175,7 @@ Give an excellent and novel heuristic algorithm to solve this task and also give
                         root=ioh_dir,
                         folder_name=algorithm_name,
                         algorithm_name=algorithm_name,
+                        store_positions=True,
                     )
                     combined_logger = ioh.logger.Combine([l1, l2])
                     f_new.attach_logger(combined_logger)

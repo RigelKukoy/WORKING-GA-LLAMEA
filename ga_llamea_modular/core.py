@@ -61,7 +61,7 @@ from typing import Any, List, Optional, Tuple, Type
 
 from .bandit import DiscountedThompsonSampler
 from .interfaces import LLMProtocol, ProblemProtocol, SolutionProtocol
-from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator, WeaknessRefinementOperator
+from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator, WeaknessRefinementOperator, RefineOperator
 from .utils import (
     calculate_reward,
     extract_code,
@@ -121,6 +121,7 @@ class GA_LLaMEA:
         arm_names: Optional[List[str]] = None,
         always_select_best: bool = False,
         use_init_prompt_for_random_new: bool = False,
+        num_crossover_inspirations: int = 1,
         **kwargs,
     ):
         """Initialize GA-LLAMEA.
@@ -163,6 +164,7 @@ class GA_LLaMEA:
         self.n_offspring = n_offspring
         self.elitism = elitism
         self.always_select_best = always_select_best
+        self.num_crossover_inspirations = num_crossover_inspirations
         self.kwargs = kwargs
 
         # Solution factory
@@ -183,7 +185,8 @@ class GA_LLaMEA:
 
         # Initialize operators
         self._simplify = SimplifyOperator()
-        self._crossover = CrossoverOperator()
+        self._refine = RefineOperator()
+        self._crossover = CrossoverOperator(num_inspirations=num_crossover_inspirations)
         self._random_new = RandomNewOperator(use_init_prompt=use_init_prompt_for_random_new)
         self._refine_weakness = WeaknessRefinementOperator()
 
@@ -324,12 +327,17 @@ class GA_LLaMEA:
                     prompt = self._simplify.build_prompt(problem, self.population, parent)
                     parent_ids = [parent.id]
                     baseline_fitness = parent.fitness
+                elif operator_name == "refine":
+                    parent = self._select_parent()
+                    prompt = self._refine.build_prompt(problem, self.population, parent)
+                    parent_ids = [parent.id]
+                    baseline_fitness = parent.fitness
                 elif operator_name == "crossover":
-                    parent1, parent2 = self._select_two_parents()
-                    prompt = self._crossover.build_prompt(problem, self.population, parent1, parent2)
-                    parent_ids = [parent1.id, parent2.id]
-                    # Crossover child should beat the better parent
-                    baseline_fitness = max(parent1.fitness, parent2.fitness)
+                    parent1, inspirations = self._select_crossover_parents()
+                    prompt = self._crossover.build_prompt(problem, self.population, parent1, inspirations=inspirations)
+                    parent_ids = [parent1.id] + [p.id for p in inspirations]
+                    # Crossover child should beat the best parent
+                    baseline_fitness = max([parent1.fitness] + [p.fitness for p in inspirations])
                 elif operator_name == "refine_weakness":
                     parent = self._select_parent()
                     prompt = self._refine_weakness.build_prompt(
@@ -467,65 +475,69 @@ class GA_LLaMEA:
             return solution
 
     def _select_parent(self, tournament_size: int = 2) -> Any:
-        """Select a parent using binary tournament selection (fitness-biased).
+        """Select a parent randomly (uniform selection).
         
-        Tournament selection provides a good balance between exploitation
-        (preferring fitter parents) and diversity (not always picking the best).
+        Changed from tournament selection to random selection to match standard LLaMEA.
         
         Args:
-            tournament_size: Number of candidates to compare. Default 2 (binary).
+            tournament_size: Ignored. Kept for signature compatibility.
         """
         if self.always_select_best:
             return max(self.population, key=lambda s: s.fitness)
 
-        candidates = random.sample(
-            self.population, min(tournament_size, len(self.population))
-        )
-        return max(candidates, key=lambda s: s.fitness)
+        return random.choice(self.population)
     
     def _select_parent_from(self, pool: List[Any], tournament_size: int = 2) -> Any:
-        """Select a parent from a specific pool using tournament selection.
+        """Select a parent from a specific pool randomly (uniform selection).
         
-        Used by crossover to select the second parent from a filtered pool
-        (e.g., excluding the first parent's code).
+        Changed from tournament selection to random selection.
         
         Args:
             pool: List of candidate solutions to select from.
-            tournament_size: Number of candidates to compare.
+            tournament_size: Ignored. Kept for signature compatibility.
         """
-        candidates = random.sample(
-            pool, min(tournament_size, len(pool))
-        )
-        return max(candidates, key=lambda s: s.fitness)
+        return random.choice(pool)
 
-    def _select_two_parents(self) -> Tuple[Any, Any]:
-        """Select two diverse parents for crossover using tournament selection.
+    def _select_crossover_parents(self) -> Tuple[Any, List[Any]]:
+        """Select diverse parents for crossover using random selection.
         
-        Uses tournament selection for both parents with a diversity constraint:
-        parent2 is selected from solutions with *different code* than parent1.
-        This prevents repetitive hybrids from always involving the same champion.
+        Uses uniform random selection for parents with a diversity constraint:
+        inspirations are randomly selected from solutions with *different code* than parent1.
         
-        The parents are ordered so parent1 has higher fitness (used as the
+        The parents are ordered so parent1 has the highest fitness (used as the
         "foundation" in the crossover prompt).
         """
-        parent1 = self._select_parent(tournament_size=2)
+        parent1 = self._select_parent()
         
-        # Parent2: tournament from candidates with different code
+        inspirations = []
         remaining = [p for p in self.population if p.code != parent1.code]
         if not remaining:
             # All have same code; pick any other individual
             remaining = [p for p in self.population if p is not parent1]
-        if not remaining:
-            # Population of 1; crossover degrades to mutation-like
-            return parent1, parent1
+            
+        for _ in range(self.num_crossover_inspirations):
+            if not remaining:
+                if not inspirations:
+                    # Population of 1; crossover degrades to mutation-like
+                    inspirations = [parent1]
+                break
+                
+            insp = self._select_parent_from(remaining)
+            inspirations.append(insp)
+            
+            # Remove selected inspiration to ensure diverse inspirations
+            remaining = [p for p in remaining if p.code != insp.code]
+            if not remaining:
+                remaining = [p for p in self.population if p is not parent1 and p not in inspirations]
         
-        parent2 = self._select_parent_from(remaining, tournament_size=2)
+        # Ensure parent1 has higher fitness than all inspirations
+        best_insp = max(inspirations, key=lambda s: s.fitness)
+        if best_insp.fitness > parent1.fitness:
+            inspirations.remove(best_insp)
+            inspirations.append(parent1)
+            parent1 = best_insp
         
-        # Ensure parent1 has higher fitness (used as foundation in prompt)
-        if parent2.fitness > parent1.fitness:
-            parent1, parent2 = parent2, parent1
-        
-        return parent1, parent2
+        return parent1, inspirations
 
     def _select(self, population: List[Any], n: int) -> List[Any]:
         """Select best n individuals with diversity preservation.
