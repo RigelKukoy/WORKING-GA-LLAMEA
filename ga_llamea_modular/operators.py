@@ -367,43 +367,29 @@ class WeaknessRefinementOperator(BaseOperator):
         task_prompt = self._get_task_prompt(problem)
         history = self._get_population_history(population)
         
-        # Get and format AUCs
-        aucs = parent.metadata.get("aucs", [])
-        auc_text = ""
-        if aucs:
-            # Create a list of (index, auc) tuples to keep track of original instance indices
-            indexed_aucs = list(enumerate(aucs))
-            # Sort by AUC ascending (worst to best)
-            sorted_aucs = sorted(indexed_aucs, key=lambda x: x[1])
-            
-            # Label bottom 25% as WEAK, top 25% as STRONG
-            n_instances = len(sorted_aucs)
-            q1 = n_instances // 4
-            q3 = n_instances - (n_instances // 4)
-            
-            auc_lines = []
-            for i, (orig_idx, auc_val) in enumerate(sorted_aucs):
-                label = ""
-                if i < q1:
-                    label = " (WEAK)"
-                elif i >= q3:
-                    label = " (STRONG)"
-                auc_lines.append(f"- Instance {orig_idx}: {auc_val:.4f}{label}")
-            
-            auc_text = "\nPer-instance performance (AOCC scores, sorted worst to best):\n" + "\n".join(auc_lines) + "\n"
+        description = parent.description if hasattr(parent, 'description') and parent.description else "No description available."
+        solution = parent.code
+        feedback = parent.feedback if hasattr(parent, 'feedback') else ""
+        error_message = f"\n### Error Encountered\n{parent.error}\n" if hasattr(parent, 'error') and parent.error else ""
         
         algo_details = f"""
-Algorithm to improve (mean AOCC: {parent.fitness:.4f}):
+The selected solution to update is:
+{description}
+
+With code:
+
 ```python
-{parent.code}
-```{auc_text}
-This algorithm performs well on average but poorly on some problem instances.
-Analyze what types of optimization landscapes or function properties might
-cause these failures. Redesign the algorithm to be more robust across all
-instances while maintaining its strengths on the ones it already handles well.
+{solution}
+```
+
+Feedback:
+
+{feedback}
+{error_message}
 """
+        instruction = "Refine the strategy of the selected solution to improve it."
         
-        return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{problem.format_prompt}"
+        return f"{task_prompt}\n\nThe current population of algorithms already evaluated (name, description, score) is:\n{history}\n{algo_details}\n{instruction}\n\n{problem.format_prompt}"
 
 
 class RandomNewOperator(BaseOperator):

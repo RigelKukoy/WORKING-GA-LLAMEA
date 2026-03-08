@@ -1,14 +1,10 @@
 """
-GA-LLAMEA Ablation Study: Crossover and Prompt Comparison
+GA-LLAMEA Ablation Study: Crossover and Refine Operator
 =========================================================
 
 This script runs an ablation study to compare:
-1. Baseline LLAMEA (using mutation prompt 5)
-2. GA-LLAMEA with crossover (3 inspirations) and baseline mutation prompts (refine, random_new, simplify)
-3. GA-LLAMEA with crossover (1 inspiration) removing the refine prompt (simplify, random_new, crossover)
-4. GA-LLAMEA with crossover (3 inspirations) removing the refine prompt (simplify, random_new, crossover)
-
-The random new prompt is configured to use the structural reference instead of the init prompt.
+1. Baseline LLaMEA with 4 prompts (random_new, simplify, refine, dynamic_crossover with 3 inspirations)
+2. GA-LLAMEA with 4 arms (random_new, simplify, refine_weakness, crossover with 3 inspirations)
 """
 
 from iohblade.experiment import MA_BBOB_Experiment
@@ -89,7 +85,7 @@ if __name__ == "__main__":
     seeds = [0 + i for i in range(num_runs)]  # Seeds: [0, 1, 2, 3, 4]
 
     print("=" * 80)
-    print("GA-LLAMEA Crossover & Prompts Ablation Study")
+    print("GA-LLAMEA Refine Ablation Study")
     print("=" * 80)
     print(f"Budget: {budget} LLM queries per run")
     print(f"Runs: {num_runs}")
@@ -97,91 +93,47 @@ if __name__ == "__main__":
     print(f"LLM: {ai_model}")
     print()
 
-    # Method 1. Baseline LLAMEA (mutation prompt 5)
+    # Method 1. LLaMEA with 4 prompts (random_new, simplify, refine, dynamic crossover 3 inspirations)
     Baseline_LLaMEA = LLaMEA(
         llm=llm,
         budget=budget,
-        name="Baseline-LLaMEA",
+        name="Baseline-LLaMEA-4Prompts",
         mutation_prompts=None, # Will set this below
         n_parents=4,
         n_offspring=8,
         elitism=True
     )
-    
-    mutation_prompts5 = [
-        "Refine the strategy of the selected solution to improve it.",  # small mutation
-        "Generate a new algorithm that is different from the algorithms you have tried before.", #new random solution
-        "Refine and simplify the selected algorithm to improve it.", #simplify
-    ]
-    
-    # Update the baseline with our original prompts
-    Baseline_LLaMEA.kwargs['mutation_prompts'] = mutation_prompts5
-
-    print("✓ Configured Baseline-LLAMEA (mutation prompt 5)")
-    print("  Prompts: refine, random_new, simplify")
-    print()
-
-    # Method 2. LLaMEA with crossover (1 inspiration), no refine
-    LLaMEA_M2 = LLaMEA(
-        llm=llm,
-        budget=budget,
-        name="LLaMEA-Crossover1-NoRefine",
-        mutation_prompts=None, # Will set this below
-        n_parents=4,
-        n_offspring=8,
-        elitism=True
-    )
-    dynamic_crossover_prompt_1 = DynamicCrossoverPrompt(LLaMEA_M2, num_inspirations=1)
-    LLaMEA_M2.kwargs['mutation_prompts'] = [
+    dynamic_crossover_prompt = DynamicCrossoverPrompt(Baseline_LLaMEA, num_inspirations=3)
+    Baseline_LLaMEA.kwargs['mutation_prompts'] = [
         "Generate a new algorithm that is different from the algorithms you have tried before.",
         "Refine and simplify the selected algorithm to improve it.",
-        dynamic_crossover_prompt_1
+        "Refine the strategy of the selected solution to improve it.",
+        dynamic_crossover_prompt
     ]
-    print("✓ Configured LLaMEA-Crossover1-NoRefine")
-    print("  Prompts: random_new, simplify, dynamic_crossover (1 inspiration)")
+    print("✓ Configured Baseline-LLaMEA-4Prompts")
+    print("  Prompts: random_new, simplify, refine, dynamic_crossover (3 inspirations)")
     print()
 
-    # Method 3. LLaMEA with crossover (3 inspirations), no refine
-    LLaMEA_M3 = LLaMEA(
+    # Method 2. GA-LLAMEA with crossover (3 arms) + refine operator
+    GA_LLaMEA_WithRefine = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        name="LLaMEA-Crossover3-NoRefine",
-        mutation_prompts=None, # Will set this below
-        n_parents=4,
-        n_offspring=8,
-        elitism=True
-    )
-    dynamic_crossover_prompt_3 = DynamicCrossoverPrompt(LLaMEA_M3, num_inspirations=3)
-    LLaMEA_M3.kwargs['mutation_prompts'] = [
-        "Generate a new algorithm that is different from the algorithms you have tried before.",
-        "Refine and simplify the selected algorithm to improve it.",
-        dynamic_crossover_prompt_3
-    ]
-    print("✓ Configured LLaMEA-Crossover3-NoRefine")
-    print("  Prompts: random_new, simplify, dynamic_crossover (3 inspirations)")
-    print()
-
-    # Method 4. GA-LLAMEA with crossover (3 arms, no refine)
-    GA_LLaMEA_M4 = GA_LLaMEA_Method(
-        llm=llm,
-        budget=budget,
-        name="GA-LLAMEA-3Arms-NoRefine",
+        name="GA-LLAMEA-4Arms-WithRefine",
         n_parents=4,
         n_offspring=8,
         elitism=True,
         discount=0.9,
         tau_max=0.1,
-        arm_names=["simplify", "crossover", "random_new"],
+        arm_names=["simplify", "crossover", "random_new", "refine_weakness"],
         num_crossover_inspirations=3,
         use_init_prompt_for_random_new=False
     )
-    print("✓ Configured GA-LLAMEA-3Arms-NoRefine")
-    print("  Arms: simplify, crossover, random_new")
+    print("✓ Configured GA-LLAMEA-4Arms-WithRefine")
+    print("  Arms: simplify, crossover, random_new, refine_weakness")
     print("  num_inspirations: 3")
     print()
 
-
-    methods = [Baseline_LLaMEA, LLaMEA_M2, LLaMEA_M3, GA_LLaMEA_M4]
+    methods = [Baseline_LLaMEA, GA_LLaMEA_WithRefine]
     
     # Generate a unique directory for this experiment run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
