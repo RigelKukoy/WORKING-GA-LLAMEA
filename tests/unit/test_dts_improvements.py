@@ -147,78 +147,48 @@ class TestEpsilonGreedyExploration:
         assert weak_count > 5, f"Weak arm only selected {weak_count} times out of 200"
 
 
-class TestGraduatedReward:
-    """Test the graduated reward function."""
+class TestAbsoluteFitnessReward:
+    """Test the absolute fitness reward function."""
 
     def test_invalid_gives_zero(self):
         """Invalid solutions should always get 0.0 reward."""
-        assert calculate_reward(0.5, 0.9, is_valid=False) == 0.0
-        assert calculate_reward(0.0, 0.0, is_valid=False) == 0.0
+        assert calculate_reward(0.9, is_valid=False) == 0.0
+        assert calculate_reward(0.0, is_valid=False) == 0.0
 
-    def test_large_improvement_gives_one(self):
-        """A 10%+ improvement over parent should get 1.0 reward."""
-        assert calculate_reward(0.5, 0.55, is_valid=True) == 1.0  # +10%
-        assert calculate_reward(0.5, 0.60, is_valid=True) == 1.0  # +20%
+    def test_valid_returns_fitness_directly(self):
+        """Valid solutions should return their fitness as the reward."""
+        assert calculate_reward(0.85, is_valid=True) == 0.85
+        assert calculate_reward(0.45, is_valid=True) == 0.45
+        assert calculate_reward(0.0, is_valid=True) == 0.0
 
-    def test_small_improvement_gives_graduated(self):
-        """Small improvements should get reward in [0.6, 1.0)."""
-        r = calculate_reward(0.5, 0.51, is_valid=True)  # +2%
-        assert 0.6 < r < 1.0, f"Small improvement reward {r} not in (0.6, 1.0)"
+    def test_higher_fitness_gives_higher_reward(self):
+        """Higher fitness should produce higher reward."""
+        r_low = calculate_reward(0.3, is_valid=True)
+        r_mid = calculate_reward(0.6, is_valid=True)
+        r_high = calculate_reward(0.9, is_valid=True)
+        assert r_low < r_mid < r_high
 
-    def test_small_improvement_less_than_large(self):
-        """Larger improvements should get higher rewards."""
-        r_small = calculate_reward(0.5, 0.51, is_valid=True)   # +2%
-        r_medium = calculate_reward(0.5, 0.525, is_valid=True)  # +5%
-        r_large = calculate_reward(0.5, 0.55, is_valid=True)    # +10%
-        assert r_small < r_medium < r_large
-
-    def test_improvement_from_zero_parent(self):
-        """Improvement from zero parent should get high reward."""
-        r = calculate_reward(0.0, 0.3, is_valid=True)
-        assert r > 0.1, f"Improvement from 0 got too low reward: {r}"
-
-    def test_zero_parent_no_improvement_gives_small_reward(self):
-        """Valid but parent_score <= 0 and no improvement should get 0.1."""
-        assert calculate_reward(0.0, 0.0, is_valid=True) == 0.1
-        assert calculate_reward(-1.0, -2.0, is_valid=True) == 0.1
-
-    def test_graduated_regression_scale(self):
-        """Regression reward should scale with child/parent ratio."""
-        # 90% of parent → 0.1 + 0.4×0.9 = 0.46
-        r = calculate_reward(1.0, 0.9, is_valid=True)
-        assert abs(r - 0.46) < 1e-6
-
-        # 50% of parent → 0.1 + 0.4×0.5 = 0.30
-        r = calculate_reward(1.0, 0.5, is_valid=True)
-        assert abs(r - 0.30) < 1e-6
-
-        # 0% of parent → 0.1 + 0.4×0.0 = 0.10
-        r = calculate_reward(1.0, 0.0, is_valid=True)
-        assert abs(r - 0.10) < 1e-6
+    def test_reward_clipped_to_unit_interval(self):
+        """Reward should be clipped to [0, 1] even for out-of-range inputs."""
+        assert calculate_reward(1.5, is_valid=True) == 1.0
+        assert calculate_reward(-0.5, is_valid=True) == 0.0
 
     def test_reward_bounded_zero_to_one(self):
         """Reward should always be in [0, 1]."""
         test_cases = [
-            (0.5, 0.7, True),
-            (0.5, 0.3, True),
-            (0.5, 0.0, True),
-            (0.5, 0.5, True),
-            (0.0, 0.0, True),
-            (1.0, 0.99, True),
-            (0.5, 0.9, False),
-            (0.5, 0.501, True),   # tiny improvement
-            (0.5, 0.55, True),    # 10% improvement
-            (0.5, 0.75, True),    # 50% improvement
+            (0.7, True),
+            (0.3, True),
+            (0.0, True),
+            (0.5, True),
+            (0.99, True),
+            (0.9, False),
+            (0.501, True),
+            (0.55, True),
+            (0.75, True),
         ]
-        for parent, child, valid in test_cases:
-            r = calculate_reward(parent, child, valid)
-            assert 0.0 <= r <= 1.0, f"Reward {r} out of bounds for ({parent}, {child}, {valid})"
-
-    def test_close_to_parent_gets_higher_reward(self):
-        """Closer to parent (regression) should give higher reward than far from parent."""
-        r_close = calculate_reward(0.5, 0.48, is_valid=True)  # close
-        r_far = calculate_reward(0.5, 0.1, is_valid=True)     # far
-        assert r_close > r_far
+        for child, valid in test_cases:
+            r = calculate_reward(child, valid)
+            assert 0.0 <= r <= 1.0, f"Reward {r} out of bounds for ({child}, {valid})"
 
 
 if __name__ == "__main__":

@@ -35,7 +35,8 @@ KEY PARAMETERS:
     - budget: Total LLM queries allowed (controls experiment duration)
     - n_parents (μ): Population size (default 4)
     - n_offspring (λ): Generated per generation (default 16)
-    - discount: D-TS forgetting factor (default 0.9)
+    - discount: D-TS forgetting factor (default 0.99)
+    - epsilon_exploration: Random arm selection floor (default 0.4)
     - elitism: (μ+λ) if True, (μ,λ) if False
 
 USAGE:
@@ -61,7 +62,7 @@ from typing import Any, List, Optional, Tuple, Type
 
 from .bandit import DiscountedThompsonSampler
 from .interfaces import LLMProtocol, ProblemProtocol, SolutionProtocol
-from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator, WeaknessRefinementOperator, RefineOperator
+from .operators import SimplifyOperator, CrossoverOperator, RandomNewOperator, RefineOperator
 from .utils import (
     calculate_reward,
     extract_code,
@@ -76,16 +77,16 @@ from .utils import (
 class GA_LLaMEA:
     """GA-LLAMEA: LLaMEA with Discounted Thompson Sampling for operator selection.
     
-    This method uses a multi-armed bandit (D-TS) to adaptively select between three
+    This method uses a multi-armed bandit (D-TS) to adaptively select between
     genetic operators:
         - **Simplify**: Simplify and improve a single parent
         - **Crossover**: Combine the best elements of two parents
         - **Random New**: Generate a completely new algorithm
     
-    The bandit learns which operator works best over time, adapting to non-stationary
-    rewards through exponential discounting. Rewards are computed against the
-    *parent's* fitness (not the global best) so each operator gets credit for
-    improvements relative to its starting point.
+    The bandit learns which operator produces the highest-quality solutions,
+    using absolute fitness as the reward signal (no per-operator baselines).
+    Stagnation detection forces explorative operators (crossover/random_new)
+    when the best fitness hasn't improved for a configurable number of evaluations.
     
     Attributes:
         llm: LLM instance for code generation
@@ -115,9 +116,9 @@ class GA_LLaMEA:
         n_parents: int = 4,
         n_offspring: int = 16,
         elitism: bool = True,
-        discount: float = 0.9,
-        tau_max: float = 0.10,
-        epsilon_exploration: float = 0.05,
+        discount: float = 0.99,
+        tau_max: float = 0.20,
+        epsilon_exploration: float = 0.4,
         arm_names: Optional[List[str]] = None,
         always_select_best: bool = False,
         use_init_prompt_for_random_new: bool = False,
@@ -144,14 +145,16 @@ class GA_LLaMEA:
             
             elitism: True = (mu+lambda) selection, False = (mu,lambda).
             
-            discount: D-TS discount factor gamma in (0, 1]. Default 0.9.
+            discount: D-TS discount factor gamma in (0, 1]. Default 0.99.
+                     Gentle discount preserves DTS adaptation while using
+                     nearly all observations at typical budgets (~100).
             
             tau_max: Maximum sampling std dev for D-TS. Paper recommends
-                     tau_max ~ mu_max/5. Default 0.15.
+                     tau_max ~ mu_max/5. Default 0.20.
             
             epsilon_exploration: Probability of random arm selection (exploration
                                floor). Prevents permanent arm extinction.
-                               0.0 = pure TS, 0.1 = 10% random. Default 0.1.
+                               0.0 = pure TS, 1.0 = fully random. Default 0.4.
             
             arm_names: List of operator arm names. Default: ["simplify", "crossover", "random_new"].
             
@@ -188,13 +191,17 @@ class GA_LLaMEA:
         self._refine = RefineOperator()
         self._crossover = CrossoverOperator(num_inspirations=num_crossover_inspirations)
         self._random_new = RandomNewOperator(use_init_prompt=use_init_prompt_for_random_new)
-        self._refine_weakness = WeaknessRefinementOperator()
 
         # State
         self.population: List[Any] = []
         self.best_solution: Optional[Any] = None
         self.generation = 0
         self.llm_calls = 0
+        
+        # Stagnation detection: force crossover/random_new when no improvement
+        self._stagnation_counter = 0
+        self._stagnation_threshold = 10
+        self._best_fitness_at_last_improvement = -float('inf')
         
         # Arm history for post-hoc analysis (does not affect algorithm behavior)
         self.arm_history: List[dict] = []
@@ -306,10 +313,10 @@ class GA_LLaMEA:
     def _generate_offspring(self, problem: ProblemProtocol) -> List[Any]:
         """Generate offspring using adaptive operator selection.
         
-        For each offspring slot, the D-TS bandit selects an operator,
-        the appropriate parent(s) are chosen, and the reward is computed
-        against the *parent's* fitness (not the global best) so the bandit
-        receives a meaningful learning signal.
+        For each offspring slot, the D-TS bandit selects an operator
+        (or stagnation detection overrides with crossover/random_new),
+        the appropriate parent(s) are chosen, and the reward is the
+        child's absolute fitness so all operators are compared fairly.
         """
         offspring = []
         
@@ -317,45 +324,34 @@ class GA_LLaMEA:
             if self.llm_calls >= self.budget:
                 break
 
-            # Select operator using D-TS
-            operator_name, theta = self.bandit.select_arm()
+            # Stagnation override: force explorative operators when stuck
+            if self._stagnation_counter >= self._stagnation_threshold:
+                explorative_arms = [a for a in self.bandit.arm_names
+                                    if a in ("crossover", "random_new")]
+                if not explorative_arms:
+                    explorative_arms = self.bandit.arm_names
+                operator_name = random.choice(explorative_arms)
+                theta = 0.0
+            else:
+                operator_name, theta = self.bandit.select_arm()
 
             try:
-                # Build prompt, determine parent lineage, and set per-operator baseline
                 if operator_name == "simplify":
                     parent = self._select_parent()
                     prompt = self._simplify.build_prompt(problem, self.population, parent)
                     parent_ids = [parent.id]
-                    baseline_fitness = parent.fitness
                 elif operator_name == "refine":
                     parent = self._select_parent()
                     prompt = self._refine.build_prompt(problem, self.population, parent)
                     parent_ids = [parent.id]
-                    baseline_fitness = parent.fitness
                 elif operator_name == "crossover":
                     parent1, inspirations = self._select_crossover_parents()
                     prompt = self._crossover.build_prompt(problem, self.population, parent1, inspirations=inspirations)
                     parent_ids = [parent1.id] + [p.id for p in inspirations]
-                    # Crossover child should beat the best parent
-                    baseline_fitness = max([parent1.fitness] + [p.fitness for p in inspirations])
-                elif operator_name == "refine_weakness":
-                    parent = self._select_parent()
-                    prompt = self._refine_weakness.build_prompt(
-                        problem, self.population, parent
-                    )
-                    parent_ids = [parent.id]
-                    baseline_fitness = parent.fitness
                 else:  # random_new
                     prompt = self._random_new.build_prompt(problem, self.population)
                     parent_ids = []
-                    # Random new is "good" if competitive with population median
-                    if self.population:
-                        sorted_fits = sorted(s.fitness for s in self.population)
-                        baseline_fitness = sorted_fits[len(sorted_fits) // 2]
-                    else:
-                        baseline_fitness = -float('inf')
 
-                # Generate solution with proper lineage for CEG
                 child = self._generate_solution(
                     prompt, problem,
                     parent_ids=parent_ids,
@@ -364,53 +360,52 @@ class GA_LLaMEA:
                 )
                 self.arm_history.append({"eval": self.llm_calls, "operator": operator_name})
                 
-                # Code extraction failure — log manually and skip
                 if child.error:
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
-                    # Failed — penalize operator with is_valid=False (reward=0.0)
-                    self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
+                    self.bandit.update(operator_name, calculate_reward(0.0, is_valid=False))
+                    self._stagnation_counter += 1
                     continue
 
-                # Validate code before expensive subprocess evaluation
                 is_valid, validation_error = validate_code(child.code)
                 if not is_valid:
                     child.error = f"Validation failed: {validation_error}"
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
-                    # Validation failure — penalize operator with is_valid=False (reward=0.0)
-                    self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
+                    self.bandit.update(operator_name, calculate_reward(0.0, is_valid=False))
+                    self._stagnation_counter += 1
                     print(f"Code validation failed for {child.name}: {validation_error}")
                     continue
 
-                # Set metadata before evaluation (preserved through subprocess pickling)
                 child.metadata["operator"] = operator_name
                 child.metadata["theta_sampled"] = theta
                 child.metadata["generation"] = self.generation
 
-                # Evaluate via Problem.__call__() for subprocess isolation,
-                # timeout enforcement, and consistent error handling with LLaMEA/EoH.
-                # Problem.__call__() handles logging internally.
                 child = problem(child)
 
                 if not child.error:
                     offspring.append(child)
 
-                    # Compute reward against parent fitness (per-operator baseline)
-                    reward = calculate_reward(baseline_fitness, child.fitness, is_valid=True)
+                    reward = calculate_reward(child.fitness, is_valid=True)
                     self.bandit.update(operator_name, reward)
                     child.metadata["reward"] = reward
-                    child.metadata["baseline_fitness"] = baseline_fitness
+
+                    # Stagnation tracking
+                    if child.fitness > self._best_fitness_at_last_improvement:
+                        self._best_fitness_at_last_improvement = child.fitness
+                        self._stagnation_counter = 0
+                    else:
+                        self._stagnation_counter += 1
                 else:
-                    # Evaluation failure (runtime error, timeout, etc.) — penalize with is_valid=False (reward=0.0)
-                    failure_reward = calculate_reward(0, 0, is_valid=False)
+                    failure_reward = calculate_reward(0.0, is_valid=False)
                     self.bandit.update(operator_name, failure_reward)
                     child.metadata["reward"] = failure_reward
+                    self._stagnation_counter += 1
                     print(f"Evaluation failed for {child.name}: {child.error}")
 
             except Exception as e:
-                # Unexpected failure — penalize operator with is_valid=False (reward=0.0)
-                self.bandit.update(operator_name, calculate_reward(0, 0, is_valid=False))
+                self.bandit.update(operator_name, calculate_reward(0.0, is_valid=False))
+                self._stagnation_counter += 1
                 continue
                 
         return offspring

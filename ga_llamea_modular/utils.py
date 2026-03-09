@@ -19,73 +19,44 @@ import re
 from typing import Optional, Any, Tuple, Type
 
 
-def calculate_reward(parent_score: float, child_score: float, is_valid: bool) -> float:
-    """Calculate graduated reward for bandit update.
+def calculate_reward(child_score: float, is_valid: bool) -> float:
+    """Calculate absolute fitness reward for bandit update.
     
-    Uses a graduated reward signal bounded in [0, 1] as required by the
-    Discounted Thompson Sampling paper (Qi et al., 2023).
+    Uses the child's absolute fitness as the reward signal, bounded in [0, 1]
+    as required by the Discounted Thompson Sampling paper (Qi et al., 2023).
     
-    Graduated rewards preserve magnitude information for BOTH improvements
-    and regressions, giving the D-TS bandit richer signal — especially
-    critical with low budgets (~30 total observations per arm).
+    This approach eliminates the per-operator baseline asymmetry that caused
+    simplify to receive inflated rewards for trivial improvements over mediocre
+    parents, while crossover was punished for not beating the best parent.
+    With absolute fitness, the bandit directly learns: "which operator produces
+    the highest-quality solutions on average?"
     
-    Reward scale:
-        0.0       invalid (error, timeout, code failure)
-        0.1       valid but terrible (child_score near 0)
-        0.1-0.5   valid regression, proportional to child/parent ratio
-        0.6-1.0   valid improvement, graduated by magnitude
-                  (10%+ improvement = 1.0, smaller = 0.6-0.96)
+    AOCC fitness is already in [0, 1], so child_score maps directly.
     
     Args:
-        parent_score: Baseline fitness of the parent (or median for random_new).
-                      This should be the *parent's* fitness, NOT the global best.
-        child_score: New solution's fitness after evaluation.
+        child_score: New solution's fitness after evaluation (AOCC, in [0, 1]).
         is_valid: Whether the solution is valid (no errors during evaluation).
                   Pass False for code extraction failures, validation failures,
                   evaluation errors, and timeouts.
         
     Returns:
-        float: Graduated reward value in [0, 1]:
-            0.6-1.0   if valid and improves (graduated by improvement magnitude)
-            0.1-0.5   if valid but no improvement (scaled by child/parent ratio)
-            0.0       if invalid (error, timeout, etc.)
+        float: Reward value in [0, 1]:
+            child_score   if valid (clipped to [0, 1])
+            0.0           if invalid (error, timeout, etc.)
         
     Example:
-        >>> calculate_reward(0.5, 0.55, True)   # 10%+ improvement
-        1.0
-        >>> calculate_reward(0.5, 0.52, True)   # 4% improvement
-        0.76
-        >>> calculate_reward(0.5, 0.501, True)  # Tiny improvement
-        0.604
-        >>> calculate_reward(0.5, 0.45, True)   # Close to parent (regression)
-        0.46
-        >>> calculate_reward(0.5, 0.25, True)   # Half of parent
-        0.3
-        >>> calculate_reward(0.5, 0.0, True)    # Terrible
-        0.1
-        >>> calculate_reward(0.5, 0.9, False)   # Invalid
+        >>> calculate_reward(0.85, True)    # Good solution
+        0.85
+        >>> calculate_reward(0.45, True)    # Mediocre solution
+        0.45
+        >>> calculate_reward(0.0, True)     # Valid but zero fitness
         0.0
-        >>> calculate_reward(0.0, 0.3, True)    # Improvement from 0
-        1.0
+        >>> calculate_reward(0.9, False)    # Invalid (error/timeout)
+        0.0
     """
     if not is_valid:
-        return 0.0           # Penalize budget-wasting failures
-    if parent_score <= 0:
-        # No meaningful baseline — give credit for absolute quality
-        if child_score > 0:
-            return min(1.0, max(0.1, child_score))
-        return 0.1           # Valid but no signal
-    
-    ratio = max(0.0, child_score / parent_score)
-    
-    if ratio >= 1.0:
-        # Improvement: scale 0.6 → 1.0 based on magnitude
-        # A 10%+ improvement gets max reward; smaller ones get proportionally less
-        improvement_pct = min((ratio - 1.0) / 0.10, 1.0)  # 0→1 over 10% gain
-        return 0.6 + 0.4 * improvement_pct
-    else:
-        # Regression: scale 0.1 → 0.5 based on how close to parent
-        return 0.1 + 0.4 * ratio  # Maps to [0.1, 0.5]
+        return 0.0
+    return max(0.0, min(1.0, child_score))
 
 
 def extract_code(response: str) -> Optional[str]:

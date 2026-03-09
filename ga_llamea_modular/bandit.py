@@ -35,9 +35,9 @@ USAGE:
     
     bandit = DiscountedThompsonSampler(
         arm_names=["simplify", "crossover", "random_new"],
-        discount=0.9,
-        tau_max=0.15,
-        epsilon_exploration=0.1,  # 10% random arm selection
+        discount=0.99,
+        tau_max=0.20,
+        epsilon_exploration=0.4,  # 40% random arm selection
     )
     
     arm, theta = bandit.select_arm()
@@ -94,11 +94,12 @@ class DiscountedThompsonSampler:
     Args:
         arm_names: List of operator names
         discount: Exponential discount factor gamma in (0, 1]. Lower = faster adaptation.
+                 Default 0.99 (gentle discount, effective window ~100 observations).
         tau_max: Maximum sampling standard deviation (caps exploration).
-                 Paper recommends tau_max ~ mu_max/5.
+                 Paper recommends tau_max ~ mu_max/5. Default 0.20.
         epsilon_exploration: Probability of selecting a random arm instead of
                            using Thompson Sampling. Prevents arm extinction.
-                           0.0 = pure TS (default), 0.1 = 10% random.
+                           0.0 = pure TS, 1.0 = fully random. Default 0.4.
         epsilon: Small constant for numerical stability.
     
     Example:
@@ -115,9 +116,9 @@ class DiscountedThompsonSampler:
     def __init__(
         self,
         arm_names: List[str],
-        discount: float = 0.9,
-        tau_max: float = 0.15,
-        epsilon_exploration: float = 0.0,
+        discount: float = 0.99,
+        tau_max: float = 0.20,
+        epsilon_exploration: float = 0.4,
         epsilon: float = 1e-6,
         # Backward-compatible: accept but ignore old Bayesian params
         prior_mean: float = 0.0,
