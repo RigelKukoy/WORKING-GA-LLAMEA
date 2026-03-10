@@ -332,7 +332,8 @@ class GA_LLaMEA:
             if self.llm_calls >= self.budget:
                 break
 
-            # Stagnation override: force explorative operators when stuck
+            # Stagnation override: one-shot kick with explorative operator,
+            # then reset counter so the bandit can try refine/simplify again.
             if self._stagnation_counter >= self._stagnation_threshold:
                 explorative_arms = [a for a in self.bandit.arm_names
                                     if a in ("crossover", "random_new")]
@@ -340,6 +341,7 @@ class GA_LLaMEA:
                     explorative_arms = self.bandit.arm_names
                 operator_name = random.choice(explorative_arms)
                 theta = 0.0
+                self._stagnation_counter = 0
             else:
                 operator_name, theta = self.bandit.select_arm()
 

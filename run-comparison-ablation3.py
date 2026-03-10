@@ -93,7 +93,7 @@ if __name__ == "__main__":
     print("  Population: n_parents=6, n_offspring=12")
     print()
 
-    methods = [GA_LLaMEA_Warmup, GA_LLaMEA_LargePop]
+    methods = [GA_LLaMEA_Warmup]
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     experiment_dir = f"results/ABLATION-WARMUP-LARGEPOP_{timestamp}"
