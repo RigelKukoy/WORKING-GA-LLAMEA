@@ -123,6 +123,7 @@ class GA_LLaMEA:
         always_select_best: bool = False,
         use_init_prompt_for_random_new: bool = False,
         num_crossover_inspirations: int = 1,
+        warm_up_budget: int = 0,
         **kwargs,
     ):
         """Initialize GA-LLAMEA.
@@ -158,6 +159,12 @@ class GA_LLaMEA:
             
             arm_names: List of operator arm names. Default: ["simplify", "crossover", "random_new"].
             
+            warm_up_budget: Number of LLM calls to use uniform random operator
+                           selection before activating the bandit. During warm-up,
+                           the bandit still receives update() calls to learn from
+                           observations, but does not control selection. Default 0
+                           (no warm-up, bandit active from the start).
+            
             **kwargs: Additional arguments stored but not used directly.
         """
         self.llm = llm
@@ -168,6 +175,7 @@ class GA_LLaMEA:
         self.elitism = elitism
         self.always_select_best = always_select_best
         self.num_crossover_inspirations = num_crossover_inspirations
+        self.warm_up_budget = warm_up_budget
         self.kwargs = kwargs
 
         # Solution factory
@@ -331,6 +339,9 @@ class GA_LLaMEA:
                 if not explorative_arms:
                     explorative_arms = self.bandit.arm_names
                 operator_name = random.choice(explorative_arms)
+                theta = 0.0
+            elif self.warm_up_budget > 0 and self.llm_calls < self.warm_up_budget:
+                operator_name = random.choice(self.bandit.arm_names)
                 theta = 0.0
             else:
                 operator_name, theta = self.bandit.select_arm()
@@ -579,6 +590,7 @@ class GA_LLaMEA:
             "n_parents": self.n_parents,
             "n_offspring": self.n_offspring,
             "elitism": self.elitism,
+            "warm_up_budget": self.warm_up_budget,
             "bandit_state": self.bandit.get_state_snapshot() if hasattr(self, "bandit") else {},
             **self.kwargs,
         }
