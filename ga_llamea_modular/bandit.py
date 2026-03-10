@@ -119,6 +119,7 @@ class DiscountedThompsonSampler:
         discount: float = 0.99,
         tau_max: float = 0.20,
         epsilon_exploration: float = 0.4,
+        min_pulls: int = 0,
         epsilon: float = 1e-6,
         # Backward-compatible: accept but ignore old Bayesian params
         prior_mean: float = 0.0,
@@ -133,11 +134,14 @@ class DiscountedThompsonSampler:
             raise ValueError("tau_max must be positive.")
         if not 0 <= epsilon_exploration <= 1:
             raise ValueError("epsilon_exploration must be in [0, 1].")
+        if min_pulls < 0:
+            raise ValueError("min_pulls must be non-negative.")
 
         self.arm_names = arm_names
         self.discount = discount
         self.tau_max = tau_max
         self.epsilon_exploration = epsilon_exploration
+        self.min_pulls = min_pulls
         self.epsilon = epsilon
 
         # Initialize arm states
@@ -147,14 +151,38 @@ class DiscountedThompsonSampler:
     def select_arm(self) -> Tuple[str, float]:
         """Select an arm using Thompson Sampling with epsilon-greedy floor.
         
-        With probability epsilon_exploration, selects a random arm.
+        Prioritizes arms that haven't met the min_pulls threshold (Burn-in).
+        Then, with probability epsilon_exploration, selects a random arm.
         Otherwise, samples theta from each arm's posterior and picks
         the arm with the highest sampled value.
         
         Returns:
             Tuple of (selected_arm_name, sampled_theta_value)
         """
-        # Epsilon-greedy exploration floor
+        # 1. Burn-in Phase: Force exploration of arms with insufficient data
+        if self.min_pulls > 0:
+            # Find arms that haven't been pulled enough
+            undersampled_arms = [
+                name for name, state in self.arms.items() 
+                if state.pulls < self.min_pulls
+            ]
+            if undersampled_arms:
+                # Deterministically pick the first one (or random, doesn't matter much)
+                # Random is better to avoid order bias in a single generation
+                chosen_arm = random.choice(undersampled_arms)
+                
+                # We still need to return a theta for logging. 
+                # Since we have no data, sample from the prior (mean=0, var=tau_max^2)
+                # or just return 0.0. Let's sample from current belief to be consistent.
+                arm_state = self.arms[chosen_arm]
+                self._update_posterior(arm_state)
+                std_dev = math.sqrt(max(self.epsilon, arm_state.posterior_var))
+                arm_state.last_theta = random.gauss(arm_state.posterior_mean, std_dev)
+                
+                self.total_pulls += 1
+                return chosen_arm, arm_state.last_theta
+
+        # 2. Epsilon-greedy exploration floor
         if self.epsilon_exploration > 0 and random.random() < self.epsilon_exploration:
             chosen_arm = random.choice(self.arm_names)
             # Still compute posteriors and sample theta for logging

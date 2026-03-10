@@ -49,7 +49,7 @@ if __name__ == "__main__":
     print(f"LLM: {ai_model}")
     print()
 
-    # Method 1: 4 arms + warm-up (same pop size as existing WithRefine)
+    # Method 1: 4 arms + min pulls (same pop size as existing WithRefine)
     GA_LLaMEA_Warmup = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
@@ -63,15 +63,15 @@ if __name__ == "__main__":
         arm_names=["simplify", "crossover", "random_new", "refine"],
         num_crossover_inspirations=3,
         use_init_prompt_for_random_new=False,
-        warm_up_budget=24,
+        min_pulls_per_arm=6,  # 6 * 4 arms = 24 calls (approx same as 24 warm_up_budget)
     )
     print("Configured GA-LLAMEA-Warmup")
     print("  Arms: simplify, crossover, random_new, refine")
-    print("  Warm-up: 24 evals (uniform random before bandit activates)")
+    print("  Warm-up: Min 6 pulls per arm (burn-in phase)")
     print("  Population: n_parents=4, n_offspring=8")
     print()
 
-    # Method 2: 4 arms + warm-up + larger population
+    # Method 2: 4 arms + min pulls + larger population
     GA_LLaMEA_LargePop = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
@@ -85,11 +85,11 @@ if __name__ == "__main__":
         arm_names=["simplify", "crossover", "random_new", "refine"],
         num_crossover_inspirations=3,
         use_init_prompt_for_random_new=False,
-        warm_up_budget=30,
+        min_pulls_per_arm=6,
     )
     print("Configured GA-LLAMEA-LargePop")
     print("  Arms: simplify, crossover, random_new, refine")
-    print("  Warm-up: 30 evals (uniform random before bandit activates)")
+    print("  Warm-up: Min 6 pulls per arm (burn-in phase)")
     print("  Population: n_parents=6, n_offspring=12")
     print()
 
