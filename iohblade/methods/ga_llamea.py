@@ -40,11 +40,12 @@ class GA_LLaMEA_Method(Method):
         budget: int,
         name: str = "GA-LLAMEA",
         n_parents: int = 4,
-        n_offspring: int = 16,
+        n_offspring: int = 8,
         elitism: bool = True,
-        discount: float = 0.99,
-        tau_max: float = 0.20,
-        epsilon_exploration: float = 0.4,
+        discount: float = 0.95,
+        tau_max: float = 0.10,
+        epsilon_exploration: float = 0.1,
+        stagnation_threshold: int = 3,
         **kwargs,
     ):
         """
@@ -55,13 +56,14 @@ class GA_LLaMEA_Method(Method):
             budget: Total number of LLM queries allowed.
             name: Method name for logging and identification.
             n_parents: Population size (mu). Default 4.
-            n_offspring: Offspring generated per generation (lambda). Default 16.
+            n_offspring: Offspring generated per generation (lambda). Default 8.
             elitism: Selection strategy. True = (mu+lambda), False = (mu,lambda)
-            discount: D-TS discount factor gamma in (0, 1]. Default 0.99.
-            tau_max: Maximum sampling std dev for D-TS. Paper recommends
-                     tau_max ~ mu_max/5. Default 0.20.
+            discount: D-TS discount factor gamma in (0, 1]. Default 0.95.
+            tau_max: Maximum sampling std dev for D-TS. Default 0.10.
             epsilon_exploration: Probability of random arm selection.
-                               Prevents arm extinction. Default 0.4.
+                               Prevents arm extinction. Default 0.1.
+            stagnation_threshold: Consecutive non-improving generations before
+                                 stagnation override activates. Default 3.
             **kwargs: Additional arguments passed to GA_LLaMEA.
         """
         super().__init__(llm, budget, name)
@@ -71,6 +73,7 @@ class GA_LLaMEA_Method(Method):
         self.discount = discount
         self.tau_max = tau_max
         self.epsilon_exploration = epsilon_exploration
+        self.stagnation_threshold = stagnation_threshold
         self.kwargs = kwargs
 
         # Store the last instance for access to bandit statistics
@@ -98,6 +101,7 @@ class GA_LLaMEA_Method(Method):
             discount=self.discount,
             tau_max=self.tau_max,
             epsilon_exploration=self.epsilon_exploration,
+            stagnation_threshold=self.stagnation_threshold,
             **self.kwargs,
         )
 
@@ -132,6 +136,7 @@ class GA_LLaMEA_Method(Method):
             "discount": self.discount,
             "tau_max": self.tau_max,
             "epsilon_exploration": self.epsilon_exploration,
+            "stagnation_threshold": self.stagnation_threshold,
             "method_type": "GA-LLAMEA",
         }
         result.update(self.kwargs)

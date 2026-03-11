@@ -34,9 +34,9 @@ BLADE INTEGRATION:
 KEY PARAMETERS:
     - budget: Total LLM queries allowed (controls experiment duration)
     - n_parents (μ): Population size (default 4)
-    - n_offspring (λ): Generated per generation (default 16)
-    - discount: D-TS forgetting factor (default 0.99)
-    - epsilon_exploration: Random arm selection floor (default 0.4)
+    - n_offspring (λ): Generated per generation (default 8)
+    - discount: D-TS forgetting factor (default 0.95)
+    - epsilon_exploration: Random arm selection floor (default 0.1)
     - elitism: (μ+λ) if True, (μ,λ) if False
 
 USAGE:
@@ -114,16 +114,17 @@ class GA_LLaMEA:
         solution_class: Type[Any] = None,
         name: str = "GA-LLAMEA",
         n_parents: int = 4,
-        n_offspring: int = 16,
+        n_offspring: int = 8,
         elitism: bool = True,
-        discount: float = 0.99,
-        tau_max: float = 0.20,
-        epsilon_exploration: float = 0.4,
+        discount: float = 0.95,
+        tau_max: float = 0.10,
+        epsilon_exploration: float = 0.1,
         arm_names: Optional[List[str]] = None,
         always_select_best: bool = False,
         use_init_prompt_for_random_new: bool = False,
-        num_crossover_inspirations: int = 1,
-        min_pulls_per_arm: int = 5,
+        num_crossover_inspirations: int = 3,
+        min_pulls_per_arm: int = 3,
+        stagnation_threshold: int = 3,
         **kwargs,
     ):
         """Initialize GA-LLAMEA.
@@ -142,27 +143,30 @@ class GA_LLaMEA:
             
             n_parents: Population size (mu). Default 4.
             
-            n_offspring: Offspring per generation (lambda). Default 16.
+            n_offspring: Offspring per generation (lambda). Default 8.
             
             elitism: True = (mu+lambda) selection, False = (mu,lambda).
             
-            discount: D-TS discount factor gamma in (0, 1]. Default 0.99.
-                     Gentle discount preserves DTS adaptation while using
-                     nearly all observations at typical budgets (~100).
+            discount: D-TS discount factor gamma in (0, 1]. Default 0.95.
+                     Effective window ~20 observations for faster adaptation.
             
             tau_max: Maximum sampling std dev for D-TS. Paper recommends
-                     tau_max ~ mu_max/5. Default 0.20.
+                     tau_max ~ mu_max/5. Default 0.10.
             
             epsilon_exploration: Probability of random arm selection (exploration
                                floor). Prevents permanent arm extinction.
-                               0.0 = pure TS, 1.0 = fully random. Default 0.4.
+                               0.0 = pure TS, 1.0 = fully random. Default 0.1.
             
-            arm_names: List of operator arm names. Default: ["simplify", "crossover", "random_new"].
+            arm_names: List of operator arm names.
+                      Default: ["simplify", "crossover", "random_new", "refine"].
             
             min_pulls_per_arm: Minimum number of times each operator must be selected
                               before the bandit strategy takes over. This "burn-in"
                               phase ensures initial statistics are based on real data.
-                              Default 5.
+                              Default 3.
+            
+            stagnation_threshold: Number of consecutive non-improving generations
+                                 before the stagnation override activates. Default 3.
             
             **kwargs: Additional arguments stored but not used directly.
         """
@@ -184,7 +188,7 @@ class GA_LLaMEA:
             self._solution_class = DefaultSolution
 
         if arm_names is None:
-            arm_names = ["simplify", "crossover", "random_new"]
+            arm_names = ["simplify", "crossover", "random_new", "refine"]
 
         self.bandit = DiscountedThompsonSampler(
             arm_names=arm_names,
@@ -208,7 +212,7 @@ class GA_LLaMEA:
         
         # Stagnation detection: force crossover/random_new when no improvement
         self._stagnation_counter = 0
-        self._stagnation_threshold = 10
+        self._stagnation_threshold = stagnation_threshold
         self._best_fitness_at_last_improvement = -float('inf')
         
         # Arm history for post-hoc analysis (does not affect algorithm behavior)
@@ -263,11 +267,21 @@ class GA_LLaMEA:
                 # (μ,λ): Select only from offspring  
                 self.population = self._select(offspring, self.n_parents)
 
-            # Update best solution
+            # Update best solution and track stagnation per-generation
             if self.population:
                 current_best = max(self.population, key=lambda s: s.fitness)
                 if self.best_solution is None or current_best.fitness > self.best_solution.fitness:
                     self.best_solution = current_best
+                    self._stagnation_counter = 0
+                else:
+                    self._stagnation_counter += 1
+
+            # Log bandit state for DTS audit trail
+            bandit_snapshot = self.bandit.get_state_snapshot()
+            print(f"   [DTS] Gen {self.generation} bandit: " + 
+                  " | ".join(f"{k}: mean={v['mean']:.3f} pulls={v['pulls']}" 
+                             for k, v in bandit_snapshot.items()) +
+                  f" | stagnation={self._stagnation_counter}/{self._stagnation_threshold}")
 
         return self.best_solution if self.best_solution else self.population[0]
 
@@ -325,39 +339,37 @@ class GA_LLaMEA:
         (or stagnation detection overrides with crossover/random_new),
         the appropriate parent(s) are chosen, and the reward is the
         child's absolute fitness so all operators are compared fairly.
+        
+        Stagnation is tracked per-generation in __call__(), not here.
         """
         offspring = []
+        
+        # Stagnation override applies to the entire generation
+        use_stagnation_override = self._stagnation_counter >= self._stagnation_threshold
+        if use_stagnation_override:
+            bandit_arms = self.bandit.arms
+            refine_arms = [a for a in self.bandit.arm_names if a in ("refine", "simplify")]
+            explore_arms = [a for a in self.bandit.arm_names if a in ("crossover", "random_new")]
+
+            refine_mean = max((bandit_arms[a].posterior_mean for a in refine_arms), default=0.0) if refine_arms else 0.0
+            explore_mean = max((bandit_arms[a].posterior_mean for a in explore_arms), default=0.0) if explore_arms else 0.0
+
+            if refine_mean >= explore_mean and refine_arms:
+                override_pool = refine_arms
+            elif explore_arms:
+                override_pool = explore_arms
+            else:
+                override_pool = self.bandit.arm_names
+
+            self._stagnation_counter = 0
         
         for _ in range(self.n_offspring):
             if self.llm_calls >= self.budget:
                 break
 
-            # Stagnation override: force operators when stuck, direction decided by bandit
-            if self._stagnation_counter >= self._stagnation_threshold:
-                # Ask the bandit which type of operator is currently performing better.
-                # This is domain-agnostic: the bandit learns what "good" means from
-                # the actual reward signal, not from hardcoded fitness thresholds.
-                bandit_arms = self.bandit.arms
-                refine_arms = [a for a in self.bandit.arm_names if a in ("refine", "simplify")]
-                explore_arms = [a for a in self.bandit.arm_names if a in ("crossover", "random_new")]
-
-                refine_mean = max((bandit_arms[a].posterior_mean for a in refine_arms), default=0.0) if refine_arms else 0.0
-                explore_mean = max((bandit_arms[a].posterior_mean for a in explore_arms), default=0.0) if explore_arms else 0.0
-
-                if refine_mean >= explore_mean and refine_arms:
-                    # Bandit believes refinement is more valuable right now → exploit
-                    override_pool = refine_arms
-                elif explore_arms:
-                    # Bandit believes exploration is more valuable right now → explore
-                    override_pool = explore_arms
-                else:
-                    override_pool = self.bandit.arm_names
-
+            if use_stagnation_override:
                 operator_name = random.choice(override_pool)
                 theta = 0.0
-                # Reset counter so the override does not permanently lock in one mode.
-                # The system gets a fresh window to observe before overriding again.
-                self._stagnation_counter = 0
             else:
                 operator_name, theta = self.bandit.select_arm()
 
@@ -390,7 +402,6 @@ class GA_LLaMEA:
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
                     self.bandit.update(operator_name, calculate_reward(0.0, is_valid=False))
-                    self._stagnation_counter += 1
                     continue
 
                 is_valid, validation_error = validate_code(child.code)
@@ -399,7 +410,6 @@ class GA_LLaMEA:
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
                     self.bandit.update(operator_name, calculate_reward(0.0, is_valid=False))
-                    self._stagnation_counter += 1
                     print(f"Code validation failed for {child.name}: {validation_error}")
                     continue
 
@@ -415,23 +425,14 @@ class GA_LLaMEA:
                     reward = calculate_reward(child.fitness, is_valid=True)
                     self.bandit.update(operator_name, reward)
                     child.metadata["reward"] = reward
-
-                    # Stagnation tracking
-                    if child.fitness > self._best_fitness_at_last_improvement:
-                        self._best_fitness_at_last_improvement = child.fitness
-                        self._stagnation_counter = 0
-                    else:
-                        self._stagnation_counter += 1
                 else:
                     failure_reward = calculate_reward(0.0, is_valid=False)
                     self.bandit.update(operator_name, failure_reward)
                     child.metadata["reward"] = failure_reward
-                    self._stagnation_counter += 1
                     print(f"Evaluation failed for {child.name}: {child.error}")
 
             except Exception as e:
                 self.bandit.update(operator_name, calculate_reward(0.0, is_valid=False))
-                self._stagnation_counter += 1
                 continue
                 
         return offspring

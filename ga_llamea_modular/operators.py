@@ -100,23 +100,32 @@ class BaseOperator(ABC):
 {task_prompt}
 {example_prompt}"""
     
-    def _get_population_history(self, population: List[Any]) -> str:
+    def _get_population_history(
+        self, population: List[Any], include_descriptions: bool = False
+    ) -> str:
         """Get a summary of previously generated algorithms.
         
         This provides the LLM with context about what's been tried before,
         helping it avoid duplicates and learn from past successes/failures.
+        
+        Args:
+            population: Current population of solutions.
+            include_descriptions: If True, append each algorithm's description
+                                 so the LLM can understand what strategies to avoid.
         """
         if not population:
             return ""
         
-        # Sort by fitness (best first)
         sorted_pop = sorted(population, key=lambda s: s.fitness, reverse=True)
         
         history = "List of previously generated algorithm names with mean AOCC score:\n"
         for sol in sorted_pop:
             name = sol.name if sol.name else "Unknown"
             fitness = sol.fitness if sol.fitness is not None else 0.0
-            history += f"- {name}: {fitness:.4f}\n"
+            desc = ""
+            if include_descriptions and hasattr(sol, 'description') and sol.description:
+                desc = f" — {sol.description}"
+            history += f"- {name}: {fitness:.4f}{desc}\n"
         return history
 
 
@@ -451,17 +460,16 @@ class RandomNewOperator(BaseOperator):
             Complete random new prompt
         """
         task_prompt = self._get_task_prompt(problem)
-        history = self._get_population_history(population)
         
         is_init = kwargs.get("is_init", False)
 
         if is_init or self.use_init_prompt:
-            instruction = ""
-            history = "" # No history for initialization
-            # Avoid extra newlines when instruction and history are empty
             return f"{task_prompt}\n\n{problem.format_prompt}"
         
-        # Use a minimal structural skeleton as reference
+        # Include descriptions so the LLM knows what strategies to avoid
+        history = self._get_population_history(population, include_descriptions=True)
+        
+        # Structural skeleton as reference
         reference = ""
         if population:
             reference = """
@@ -487,10 +495,17 @@ class YourAlgorithm:
 
         return f_opt, x_opt
 ```
-Use a DIFFERENT strategy from the algorithms listed above. This template is only for correct structure and formatting.
+This template is only for correct structure and formatting — use a completely different optimization strategy.
 """
         
-        instruction = "Generate a new algorithm that is different from the algorithms you have tried before."
+        instruction = (
+            "Study the descriptions of the approaches listed above. Identify what "
+            "they have in common — similar search mechanisms, population structures, "
+            "or update rules. Then design an algorithm that deliberately avoids those "
+            "common patterns. Use a fundamentally different search mechanism, "
+            "information flow, or adaptation strategy. Think from first principles "
+            "about what makes the task work, rather than tweaking existing approaches."
+        )
         
         return f"{task_prompt}\n\n{history}\n{reference}\n{instruction}\n\n{problem.format_prompt}"
 
