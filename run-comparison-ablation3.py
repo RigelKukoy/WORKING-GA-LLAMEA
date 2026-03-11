@@ -63,7 +63,7 @@ if __name__ == "__main__":
         arm_names=["simplify", "crossover", "random_new", "refine"],
         num_crossover_inspirations=3,
         use_init_prompt_for_random_new=False,
-        min_pulls_per_arm=6,  # 6 * 4 arms = 24 calls (approx same as 24 warm_up_budget)
+        min_pulls_per_arm=0,  # 6 * 4 arms = 24 calls (approx same as 24 warm_up_budget)
     )
     print("Configured GA-LLAMEA-Warmup")
     print("  Arms: simplify, crossover, random_new, refine")

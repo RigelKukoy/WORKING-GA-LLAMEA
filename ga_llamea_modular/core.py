@@ -332,15 +332,31 @@ class GA_LLaMEA:
             if self.llm_calls >= self.budget:
                 break
 
-            # Stagnation override: one-shot kick with explorative operator,
-            # then reset counter so the bandit can try refine/simplify again.
+            # Stagnation override: force operators when stuck, direction decided by bandit
             if self._stagnation_counter >= self._stagnation_threshold:
-                explorative_arms = [a for a in self.bandit.arm_names
-                                    if a in ("crossover", "random_new")]
-                if not explorative_arms:
-                    explorative_arms = self.bandit.arm_names
-                operator_name = random.choice(explorative_arms)
+                # Ask the bandit which type of operator is currently performing better.
+                # This is domain-agnostic: the bandit learns what "good" means from
+                # the actual reward signal, not from hardcoded fitness thresholds.
+                bandit_arms = self.bandit.arms
+                refine_arms = [a for a in self.bandit.arm_names if a in ("refine", "simplify")]
+                explore_arms = [a for a in self.bandit.arm_names if a in ("crossover", "random_new")]
+
+                refine_mean = max((bandit_arms[a].posterior_mean for a in refine_arms), default=0.0) if refine_arms else 0.0
+                explore_mean = max((bandit_arms[a].posterior_mean for a in explore_arms), default=0.0) if explore_arms else 0.0
+
+                if refine_mean >= explore_mean and refine_arms:
+                    # Bandit believes refinement is more valuable right now → exploit
+                    override_pool = refine_arms
+                elif explore_arms:
+                    # Bandit believes exploration is more valuable right now → explore
+                    override_pool = explore_arms
+                else:
+                    override_pool = self.bandit.arm_names
+
+                operator_name = random.choice(override_pool)
                 theta = 0.0
+                # Reset counter so the override does not permanently lock in one mode.
+                # The system gets a fresh window to observe before overriding again.
                 self._stagnation_counter = 0
             else:
                 operator_name, theta = self.bandit.select_arm()
