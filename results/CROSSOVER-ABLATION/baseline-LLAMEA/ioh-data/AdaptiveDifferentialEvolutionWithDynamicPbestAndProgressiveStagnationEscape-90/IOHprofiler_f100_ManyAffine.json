@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "AdaptiveDifferentialEvolutionWithDynamicPbestAndProgressiveStagnationEscape", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 110, "evals": 10000, "best": {"evals": 3485, "y": 9.77626213547296e-11, "x": [-4.005310970773499, 3.735757588079601, 0.04813966326657442, 4.41082431690799, -4.26405623411151]}}
+		]}
+	]
+}

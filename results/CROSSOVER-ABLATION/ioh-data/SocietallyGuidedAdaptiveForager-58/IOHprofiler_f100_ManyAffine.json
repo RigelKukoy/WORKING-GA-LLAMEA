@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "SocietallyGuidedAdaptiveForager", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 78, "evals": 10000, "best": {"evals": 2483, "y": 5.837032964918625e-11, "x": [-1.6011753494628347, 1.5012325123042682, -0.9362320276100351, 3.8097705357410434, 1.959698787979476]}}
+		]}
+	]
+}

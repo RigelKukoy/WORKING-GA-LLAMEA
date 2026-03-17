@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "ADE_EDR_FLS", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 95, "evals": 10000, "best": {"evals": 9984, "y": 0.001972984573484667, "x": [-2.149906226404615, 4.014750436168715, 4.824401063853553, -2.2832907054650984, 2.1830707181022313]}}
+		]}
+	]
+}

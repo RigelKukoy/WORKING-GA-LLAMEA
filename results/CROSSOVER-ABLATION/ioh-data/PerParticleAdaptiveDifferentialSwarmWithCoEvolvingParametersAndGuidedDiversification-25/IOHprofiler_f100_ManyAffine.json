@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "PerParticleAdaptiveDifferentialSwarmWithCoEvolvingParametersAndGuidedDiversification", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 45, "evals": 10000, "best": {"evals": 3109, "y": 7.088096191107627e-11, "x": [-3.319689861321376, 0.25580739364079513, 2.367392015065327, -3.211689826246569, -1.1268949846610337]}}
+		]}
+	]
+}

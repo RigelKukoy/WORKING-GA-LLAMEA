@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "RobustSHADE_Archive", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 116, "evals": 10000, "best": {"evals": 7398, "y": 7.792660768013924e-11, "x": [2.9712154308437735, -2.7160682686139452, -0.17696309880848216, -2.7709912301714947, 0.871420200533146]}}
+		]}
+	]
+}

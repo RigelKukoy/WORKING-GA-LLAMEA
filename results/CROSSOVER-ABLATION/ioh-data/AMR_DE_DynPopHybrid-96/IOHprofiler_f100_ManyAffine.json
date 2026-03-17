@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "AMR_DE_DynPopHybrid", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 116, "evals": 10000, "best": {"evals": 6129, "y": 2.717764543325775e-11, "x": [2.9712154308934426, -2.7160682685433204, -0.17696309867940777, -2.770991230211875, 0.8714202004540376]}}
+		]}
+	]
+}

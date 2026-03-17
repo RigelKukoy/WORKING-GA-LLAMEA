@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "AdaptiveVectorBlendSearch", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 66, "evals": 10000, "best": {"evals": 4952, "y": 0.24661616127797897, "x": [1.043236289603067, 1.00562763881544, -4.410734824577374, 1.8152886908644967, 3.8050837002928195]}}
+		]}
+	]
+}

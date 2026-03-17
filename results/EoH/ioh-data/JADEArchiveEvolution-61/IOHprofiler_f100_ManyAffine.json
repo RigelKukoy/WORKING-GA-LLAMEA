@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "JADEArchiveEvolution", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 81, "evals": 10000, "best": {"evals": 3621, "y": 0.08567155552706494, "x": [2.118367630999338, 4.206936980608379, -1.6076836684284486, -0.33113475577779655, -4.999263348676625]}}
+		]}
+	]
+}

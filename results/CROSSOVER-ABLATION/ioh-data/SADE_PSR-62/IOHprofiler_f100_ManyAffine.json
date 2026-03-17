@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "SADE_PSR", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 82, "evals": 10000, "best": {"evals": 8496, "y": 1.1239422789348011e-10, "x": [0.7263919204008809, 3.6841158166477954, 1.1186488789306184, -2.9822076334905128, -4.112167253514561]}}
+		]}
+	]
+}

@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "FluxResonanceRePatterning", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 113, "evals": 10000, "best": {"evals": 5528, "y": 0.004558942808934195, "x": [4.817694653613868, -0.35729145096311676, -4.972137714587407, 4.282947529076067, 0.5865636448811341]}}
+		]}
+	]
+}

@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "SaDE_DPA_GR", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 27, "evals": 10000, "best": {"evals": 3134, "y": 0.4959874355185017, "x": [2.143915781735056, 1.0619534314388288, 3.527817480146174, -2.6156529570468257, 3.1354802831278246]}}
+		]}
+	]
+}

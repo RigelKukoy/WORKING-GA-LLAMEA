@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "AnisotropicMomentumDE_GlobalBestRejuvenation", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 82, "evals": 10000, "best": {"evals": 7500, "y": 7.885564056763522e-11, "x": [0.7263919204425969, 3.684115817123275, 1.1186488789483087, -2.9822076335281644, -4.112167253428378]}}
+		]}
+	]
+}

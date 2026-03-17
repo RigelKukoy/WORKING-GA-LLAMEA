@@ -1,0 +1,16 @@
+{
+	"version": "0.3.22", 
+	"suite": "unknown_suite", 
+	"function_id": 100, 
+	"function_name": "ManyAffine", 
+	"maximization": false, 
+	"algorithm": {"name": "ADE_EGDP", "info": "algorithm_info"},
+	"attributes": ["evaluations", "raw_y"],
+	"scenarios": [
+		{"dimension": 5,
+		"path": "data_f100_ManyAffine/IOHprofiler_f100_DIM5.dat",
+		"runs": [
+			{"instance": 72, "evals": 10000, "best": {"evals": 3616, "y": 5.6470155859682095e-11, "x": [3.098869689534084, -0.34487887738714024, 4.503292899571976, -0.2847781241811322, -2.5648862144597224]}}
+		]}
+	]
+}
