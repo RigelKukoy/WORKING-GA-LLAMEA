@@ -43,6 +43,7 @@ from iohblade.methods.llamea import LLaMEA
 #  Shared prompt text (used identically by both methods)
 # ─────────────────────────────────────────────────────────────────────────────
 
+REFINE_INSTRUCTION   = "Refine the strategy of the selected solution to improve it."
 SIMPLIFY_INSTRUCTION = "Refine and simplify the selected algorithm to improve it."
 
 RANDOM_NEW_INSTRUCTION = (
@@ -198,6 +199,7 @@ if __name__ == "__main__":
     crossover_prompt = DynamicCrossoverPrompt(LLaMEA_Crossover, num_inspirations=NUM_CROSSOVER_INSPIRATIONS)
 
     LLaMEA_Crossover.kwargs["mutation_prompts"] = [
+        REFINE_INSTRUCTION,         # arm: refine
         SIMPLIFY_INSTRUCTION,       # arm: simplify
         RANDOM_NEW_INSTRUCTION,     # arm: random_new
         crossover_prompt,           # arm: crossover  (dynamic, runtime-evaluated)
@@ -205,7 +207,7 @@ if __name__ == "__main__":
 
     print("✓ LLaMEA-Crossover")
     print("  Selection : uniform random")
-    print("  Arms      : simplify | random_new | crossover")
+    print("  Arms      : refine | simplify | random_new | crossover")
     print(f"  Init      : {N_PARENTS*INIT_OVERSAMPLE} candidates → keep best {N_PARENTS} (init_oversample={INIT_OVERSAMPLE})")
     print(f"  Crossover : {NUM_CROSSOVER_INSPIRATIONS} inspiration(s), full-code format")
     print()
@@ -214,6 +216,7 @@ if __name__ == "__main__":
     #
     # Same 3 arms as Method 1.
     # GA-LLaMEA's built-in operators already use:
+    #   RefineOperator    → same REFINE_INSTRUCTION
     #   SimplifyOperator  → same SIMPLIFY_INSTRUCTION
     #   CrossoverOperator → same full-code format + CROSSOVER_INSTRUCTION
     #   RandomNewOperator → same RANDOM_NEW_INSTRUCTION + structural reference
@@ -232,7 +235,7 @@ if __name__ == "__main__":
         discount=0.9,
         tau_max=0.1,
         epsilon_exploration=0.4,
-        arm_names=["simplify", "crossover", "random_new"],
+        arm_names=["simplify", "crossover", "random_new", "refine"],
         num_crossover_inspirations=NUM_CROSSOVER_INSPIRATIONS,
         use_init_prompt_for_random_new=False,
         init_oversample=INIT_OVERSAMPLE,
@@ -240,7 +243,7 @@ if __name__ == "__main__":
 
     print("✓ GA-LLaMEA")
     print("  Selection : Discounted Thompson Sampling (D-TS bandit)")
-    print("  Arms      : simplify | crossover | random_new")
+    print("  Arms      : simplify | crossover | random_new | refine")
     print(f"  Init      : {N_PARENTS*INIT_OVERSAMPLE} candidates → keep best {N_PARENTS} (init_oversample={INIT_OVERSAMPLE})")
     print(f"  Crossover : {NUM_CROSSOVER_INSPIRATIONS} inspiration(s), full-code format")
     print(f"  Discount  : 0.9  |  tau_max: 0.1  |  epsilon: 0.4")
