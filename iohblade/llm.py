@@ -655,7 +655,7 @@ class GeminiAPI_LLM(LLM):
             }
         self.generation_config = generation_config
         self._api_key = api_key
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client(api_key=api_key, vertexai=False)
 
     def _query(
         self, session_messages, max_retries: int = 5, default_delay: int = 10, **kwargs
@@ -700,7 +700,7 @@ class GeminiAPI_LLM(LLM):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self.client = genai.Client(api_key=self._api_key)
+        self.client = genai.Client(api_key=self._api_key, vertexai=False)
 
     def __deepcopy__(self, memo):
         cls = self.__class__
@@ -710,7 +710,7 @@ class GeminiAPI_LLM(LLM):
             if k == "client":
                 continue
             setattr(new, k, copy.deepcopy(v, memo))
-        new.client = genai.Client(api_key=new._api_key)
+        new.client = genai.Client(api_key=new._api_key, vertexai=False)
         return new
 
 
