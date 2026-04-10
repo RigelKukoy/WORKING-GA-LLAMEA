@@ -232,9 +232,9 @@ if __name__ == "__main__":
         n_parents=N_PARENTS,
         n_offspring=N_OFFSPRING,
         elitism=True,
-        discount=0.9,
-        tau_max=0.1,
-        epsilon_exploration=0.4,
+        discount=0.99,
+        tau_max=0.2,
+        epsilon_exploration=0.15,
         arm_names=["simplify", "crossover", "random_new", "refine"],
         num_crossover_inspirations=NUM_CROSSOVER_INSPIRATIONS,
         use_init_prompt_for_random_new=False,
@@ -246,7 +246,7 @@ if __name__ == "__main__":
     print("  Arms      : simplify | crossover | random_new | refine")
     print(f"  Init      : {N_PARENTS*INIT_OVERSAMPLE} candidates → keep best {N_PARENTS} (init_oversample={INIT_OVERSAMPLE})")
     print(f"  Crossover : {NUM_CROSSOVER_INSPIRATIONS} inspiration(s), full-code format")
-    print(f"  Discount  : 0.9  |  tau_max: 0.1  |  epsilon: 0.4")
+    print(f"  Discount  : 0.99  |  tau_max: 0.2  |  epsilon: 0.15")
     print()
 
     # ── Experiment setup ──────────────────────────────────────────────────────
