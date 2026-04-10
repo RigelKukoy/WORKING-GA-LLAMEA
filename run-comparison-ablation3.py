@@ -35,56 +35,58 @@ if __name__ == "__main__":
     print("GA-LLAMEA Ablation: Init Size 4 vs 8")
     print("=" * 80)
     print(f"Budget: {budget} LLM queries per run")
-    print(f"Runs  : {num_runs}  (seeds {seeds})")
-    print(f"LLM   : {ai_model}")
+    print(f"Runs: {num_runs}")
+    print(f"Seeds: {seeds}")
+    print(f"LLM: {ai_model}")
     print()
 
-    # Shared D-TS parameters (matched to run-comparison-llamea-vs-gallamea.py)
-    DTS_PARAMS = dict(
-        n_parents=4,
-        n_offspring=8,
-        elitism=True,
-        discount=0.9,
-        tau_max=0.1,
-        epsilon_exploration=0.4,
-        arm_names=["simplify", "crossover", "random_new", "refine"],
-        num_crossover_inspirations=3,
-        use_init_prompt_for_random_new=False,
-    )
-
-    # Method 1: GA-LLAMEA Baseline (4 init candidates, init_oversample=1)
+    # Method 1: GA-LLAMEA Baseline (4 init candidates)
     GA_LLaMEA_Baseline = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        name="GA-LLAMEA-4Init",
-        init_oversample=1,  # 4 * 1 = 4 candidates
-        **DTS_PARAMS,
+        name="GA-LLAMEA-Baseline",
+        n_parents=4,
+        n_offspring=8,
+        elitism=True,
+        discount=0.99,
+        tau_max=0.2,
+        epsilon_exploration=0.15,
+        arm_names=["simplify", "crossover", "random_new", "refine"],
+        num_crossover_inspirations=3,
+        use_init_prompt_for_random_new=False,
+        min_pulls_per_arm=0,
+        init_oversample=1, # Standard: 4 * 1 = 4 candidates
     )
-    print("Configured GA-LLAMEA-4Init")
-    print("  Arms           : simplify | crossover | random_new | refine")
+    print("Configured GA-LLAMEA-Baseline")
     print("  Init Candidates: 4 (init_oversample=1)")
-    print("  D-TS           : discount=0.9 | tau_max=0.1 | epsilon=0.4")
     print()
 
-    # Method 2: GA-LLAMEA Init-8 (8 init candidates, init_oversample=2)
+    # Method 2: GA-LLAMEA Init-8 (8 init candidates)
     GA_LLaMEA_Init8 = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        name="GA-LLAMEA-8Init",
-        init_oversample=2,  # 4 * 2 = 8 candidates → keep best 4
-        **DTS_PARAMS,
+        name="GA-LLAMEA-Init8",
+        n_parents=4,
+        n_offspring=8,
+        elitism=True,
+        discount=0.99,
+        tau_max=0.2,
+        epsilon_exploration=0.15,
+        arm_names=["simplify", "crossover", "random_new", "refine"],
+        num_crossover_inspirations=3,
+        use_init_prompt_for_random_new=False,
+        min_pulls_per_arm=0,
+        init_oversample=2, # Experiment: 4 * 2 = 8 candidates
     )
-    print("Configured GA-LLAMEA-8Init")
-    print("  Arms           : simplify | crossover | random_new | refine")
-    print("  Init Candidates: 8 (init_oversample=2) → keep best 4")
-    print("  D-TS           : discount=0.9 | tau_max=0.1 | epsilon=0.4")
+    print("Configured GA-LLAMEA-Init8")
+    print("  Init Candidates: 8 (init_oversample=2)")
     print()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     experiment_dir = f"results/ABLATION-INIT-SIZE_{timestamp}"
     os.makedirs(experiment_dir, exist_ok=True)
-
-    methods = [GA_LLaMEA_Baseline, GA_LLaMEA_Init8]
+    
+    methods = [ GA_LLaMEA_Init8]
     
     logger = ExperimentLogger(experiment_dir)
     
