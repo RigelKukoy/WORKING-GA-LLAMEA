@@ -1,3 +1,5 @@
+import math
+
 from llamea import LLaMEA as LLAMEA_Algorithm
 
 from ..llm import LLM
@@ -18,6 +20,10 @@ class LLaMEA(Method):
             budget (int): The maximum number of evaluations.
             name (str): The name of the method.
             kwargs: Additional arguments for configuring LLaMEA.
+                init_oversample (int): If > 1, generates n_parents * init_oversample
+                    candidates during initialization, evaluates all, and keeps the best
+                    n_parents. Matches GA-LLaMEA's init_oversample behavior.
+                    Default: 1 (standard initialization).
         """
         super().__init__(llm, budget, name)
         self.kwargs = kwargs
@@ -29,6 +35,12 @@ class LLaMEA(Method):
         Returns:
             Solution: The best solution found.
         """
+        # Extract init_oversample before passing kwargs to LLaMEA
+        # (LLaMEA does not accept this parameter natively)
+        kwargs = dict(self.kwargs)
+        init_oversample = kwargs.pop("init_oversample", 1)
+        n_parents = kwargs.get("n_parents", 5)
+
         self.llamea_instance = LLAMEA_Algorithm(
             f=problem,  # Ensure evaluation integrates with our framework
             llm=self.llm,
@@ -39,8 +51,33 @@ class LLaMEA(Method):
             log=None,  # We do not use the LLaMEA native logger, we use the experiment logger instead which is attached on problem level.
             budget=self.budget,
             max_workers=1,  # We do not use parallelization, as it is not supported in combination with the BLADE parrallelization.
-            **self.kwargs,
+            **kwargs,
         )
+
+        if init_oversample > 1:
+            # Generate n_parents * init_oversample candidates, keep best n_parents.
+            # This mirrors GA-LLaMEA's init_oversample behavior: more diverse starting
+            # population without increasing the working population size.
+            n_init = n_parents * init_oversample
+            oversampled = []
+            for _ in range(n_init):
+                sol = self.llamea_instance.initialize_single()
+                if math.isnan(sol.fitness):
+                    sol.fitness = self.llamea_instance.worst_value
+                oversampled.append(sol)
+                self.llamea_instance.run_history.append(sol)
+
+            # Sort descending by fitness (LLaMEA maximizes)
+            oversampled.sort(
+                key=lambda s: s.fitness if not math.isnan(s.fitness) else -math.inf,
+                reverse=True,
+            )
+
+            # Pre-populate with best n_parents so LLaMEA's initialize() is a no-op
+            self.llamea_instance.population = oversampled[:n_parents]
+            self.llamea_instance.update_best()
+            self.llamea_instance.generation += 1
+
         return self.llamea_instance.run()
 
     def to_dict(self):
