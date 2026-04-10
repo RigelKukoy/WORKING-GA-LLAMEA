@@ -10,7 +10,7 @@ The rest of the configuration is identical.
 """
 
 from iohblade.experiment import MA_BBOB_Experiment
-from iohblade.llm import AIML_LLM
+from iohblade.llm import GeminiAPI_LLM
 from iohblade.loggers import ExperimentLogger
 from iohblade.solution import Solution
 from iohblade.problems import MA_BBOB
@@ -23,76 +23,68 @@ import numpy as np
 if __name__ == "__main__":
     load_dotenv()
 
-    # AI/ML API (OpenAI-compatible); key from https://aimlapi.com/app/keys
-    ai_model = os.getenv("AIML_MODEL", "google/gemini-2.5-flash")
-    api_key = os.getenv("AIMLAPI_API_KEY") or os.getenv("AIML_API_KEY")
-    if not api_key:
-        raise SystemExit(
-            "Set AIMLAPI_API_KEY (or AIML_API_KEY) for AI/ML API. "
-            "See https://aimlapi.com/app/keys"
-        )
-    llm = AIML_LLM(api_key=api_key, model=ai_model)
-    
-    budget = 100 # Reduced budget for ablation efficiency, can increase if needed
-    num_runs = 1
-    seeds = [0 + i for i in range(num_runs)]
+    api_key  = os.getenv("GEMINI_API_KEY")
+    ai_model = "gemini-2.5-flash"
+    llm = GeminiAPI_LLM(api_key=api_key, model=ai_model)
+
+    budget   = 100
+    num_runs = 5
+    seeds    = list(range(num_runs))  # [0, 1, 2, 3, 4]
 
     print("=" * 80)
     print("GA-LLAMEA Ablation: Init Size 4 vs 8")
     print("=" * 80)
     print(f"Budget: {budget} LLM queries per run")
-    print(f"Runs: {num_runs}")
-    print(f"Seeds: {seeds}")
-    print(f"LLM: {ai_model}")
+    print(f"Runs  : {num_runs}  (seeds {seeds})")
+    print(f"LLM   : {ai_model}")
     print()
 
-    # Method 1: GA-LLAMEA Baseline (4 init candidates)
+    # Shared D-TS parameters (matched to run-comparison-llamea-vs-gallamea.py)
+    DTS_PARAMS = dict(
+        n_parents=4,
+        n_offspring=8,
+        elitism=True,
+        discount=0.9,
+        tau_max=0.1,
+        epsilon_exploration=0.4,
+        arm_names=["simplify", "crossover", "random_new", "refine"],
+        num_crossover_inspirations=3,
+        use_init_prompt_for_random_new=False,
+    )
+
+    # Method 1: GA-LLAMEA Baseline (4 init candidates, init_oversample=1)
     GA_LLaMEA_Baseline = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        name="GA-LLAMEA-Baseline",
-        n_parents=4,
-        n_offspring=8,
-        elitism=True,
-        discount=0.99,
-        tau_max=0.2,
-        epsilon_exploration=0.15,
-        arm_names=["simplify", "crossover", "random_new", "refine"],
-        num_crossover_inspirations=3,
-        use_init_prompt_for_random_new=False,
-        min_pulls_per_arm=0,
-        init_oversample=1, # Standard: 4 * 1 = 4 candidates
+        name="GA-LLAMEA-4Init",
+        init_oversample=1,  # 4 * 1 = 4 candidates
+        **DTS_PARAMS,
     )
-    print("Configured GA-LLAMEA-Baseline")
+    print("Configured GA-LLAMEA-4Init")
+    print("  Arms           : simplify | crossover | random_new | refine")
     print("  Init Candidates: 4 (init_oversample=1)")
+    print("  D-TS           : discount=0.9 | tau_max=0.1 | epsilon=0.4")
     print()
 
-    # Method 2: GA-LLAMEA Init-8 (8 init candidates)
+    # Method 2: GA-LLAMEA Init-8 (8 init candidates, init_oversample=2)
     GA_LLaMEA_Init8 = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        name="GA-LLAMEA-Init8",
-        n_parents=4,
-        n_offspring=8,
-        elitism=True,
-        discount=0.99,
-        tau_max=0.2,
-        epsilon_exploration=0.15,
-        arm_names=["simplify", "crossover", "random_new", "refine"],
-        num_crossover_inspirations=3,
-        use_init_prompt_for_random_new=False,
-        min_pulls_per_arm=0,
-        init_oversample=2, # Experiment: 4 * 2 = 8 candidates
+        name="GA-LLAMEA-8Init",
+        init_oversample=2,  # 4 * 2 = 8 candidates → keep best 4
+        **DTS_PARAMS,
     )
-    print("Configured GA-LLAMEA-Init8")
-    print("  Init Candidates: 8 (init_oversample=2)")
+    print("Configured GA-LLAMEA-8Init")
+    print("  Arms           : simplify | crossover | random_new | refine")
+    print("  Init Candidates: 8 (init_oversample=2) → keep best 4")
+    print("  D-TS           : discount=0.9 | tau_max=0.1 | epsilon=0.4")
     print()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     experiment_dir = f"results/ABLATION-INIT-SIZE_{timestamp}"
     os.makedirs(experiment_dir, exist_ok=True)
-    
-    methods = [ GA_LLaMEA_Init8]
+
+    methods = [GA_LLaMEA_Baseline, GA_LLaMEA_Init8]
     
     logger = ExperimentLogger(experiment_dir)
     
