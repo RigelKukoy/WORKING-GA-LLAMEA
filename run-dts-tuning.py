@@ -94,10 +94,9 @@ def main():
     load_dotenv()
 
     # Setup LLM
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY not found. Set it in .env file.")
-    llm = Gemini_LLM(api_key, args.model)
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "asia-southeast1")
+    llm = Gemini_LLM(project, location, args.model)
 
     # Seeds
     seeds = args.seeds if args.seeds else list(range(args.runs))

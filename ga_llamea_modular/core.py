@@ -124,6 +124,7 @@ class GA_LLaMEA:
         use_init_prompt_for_random_new: bool = False,
         num_crossover_inspirations: int = 1,
         min_pulls_per_arm: int = 5,
+        init_oversample: int = 1,
         **kwargs,
     ):
         """Initialize GA-LLAMEA.
@@ -164,6 +165,11 @@ class GA_LLaMEA:
                               phase ensures initial statistics are based on real data.
                               Default 5.
             
+            init_oversample: Multiplier for initial population generation. Generates
+                            n_parents * init_oversample candidates and keeps the best
+                            n_parents. Higher values improve early convergence at the
+                            cost of more init LLM queries. Default 1 (no oversampling).
+            
             **kwargs: Additional arguments stored but not used directly.
         """
         self.llm = llm
@@ -175,6 +181,7 @@ class GA_LLaMEA:
         self.always_select_best = always_select_best
         self.num_crossover_inspirations = num_crossover_inspirations
         self.min_pulls_per_arm = min_pulls_per_arm
+        self.init_oversample = init_oversample
         self.kwargs = kwargs
 
         # Solution factory
@@ -231,7 +238,6 @@ class GA_LLaMEA:
         """
         # Phase 1: Initialize population
         self._initialize_population(problem)
-        self.llm_calls = self.n_parents
         
         if not self.population:
             raise RuntimeError(
@@ -274,10 +280,13 @@ class GA_LLaMEA:
     def _initialize_population(self, problem: ProblemProtocol) -> None:
         """Initialize population with diverse algorithms.
         
-        Generates n_parents initial solutions by querying the LLM with
-        the task description and example code.
+        Generates n_parents * init_oversample candidate solutions, evaluates
+        them all, then keeps the best n_parents to seed the population.
         """
-        for i in range(self.n_parents):
+        init_count = self.n_parents * self.init_oversample
+        all_candidates = []
+
+        for i in range(init_count):
             if self.llm_calls >= self.budget:
                 break
 
@@ -291,32 +300,31 @@ class GA_LLaMEA:
                 )
                 self.arm_history.append({"eval": self.llm_calls, "operator": "init"})
                 
-                # Code extraction failure — log manually and skip
                 if child.error:
                     if hasattr(self.llm, "logger") and hasattr(self.llm.logger, "log_individual"):
                         self.llm.logger.log_individual(child)
                     continue
 
-                # Set metadata before evaluation (preserved through subprocess pickling)
                 child.metadata["generation"] = 0
                 child.metadata["operator"] = "init"
 
-                # Evaluate via Problem.__call__() for subprocess isolation,
-                # timeout enforcement, and consistent error handling with LLaMEA/EoH.
-                # Problem.__call__() handles logging internally.
                 child = problem(child)
 
                 if not child.error:
-                    self.population.append(child)
+                    all_candidates.append(child)
                 else:
                     print(f"Evaluation failed for {child.name}: {child.error}")
             except Exception as e:
                 import traceback
                 traceback.print_exc()
 
+        # Keep best n_parents from the over-sampled pool
+        all_candidates.sort(key=lambda s: s.fitness, reverse=True)
+        self.population = all_candidates[:self.n_parents]
+
         if self.population:
             self.best_solution = max(self.population, key=lambda s: s.fitness)
-            print(f"   [INFO] Initialization complete. Best Fitness: {self.best_solution.fitness:.4f}")
+            print(f"   [INFO] Initialization complete. Generated {len(all_candidates)} candidates, kept top {len(self.population)}. Best Fitness: {self.best_solution.fitness:.4f}")
 
     def _generate_offspring(self, problem: ProblemProtocol) -> List[Any]:
         """Generate offspring using adaptive operator selection.
@@ -454,46 +462,54 @@ class GA_LLaMEA:
             generation: Current generation number.
         """
         response = ""
-        try:
-            self.llm_calls += 1 # Count every attempt
-            
-            # BLADE's LLM expects list of message dicts
-            session_messages = [{"role": "user", "content": prompt}]
-            response = self.llm.query(session_messages)
+        self.llm_calls += 1 # Count every logical attempt
 
-            code = extract_code(response)
-            if not code:
-                # Create failed solution with lineage info
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # BLADE's LLM expects list of message dicts
+                session_messages = [{"role": "user", "content": prompt}]
+                response = self.llm.query(session_messages)
+
+                code = extract_code(response)
+                if not code:
+                    # Create failed solution with lineage info
+                    solution = create_solution(
+                        self._solution_class, code="", fitness=-float('inf'),
+                        parent_ids=parent_ids, operator=operator, generation=generation,
+                    )
+                    solution.metadata["llm_response"] = response
+                    solution.error = "No code extracted from response"
+                    return solution
+
+                # Create solution using factory with lineage info
                 solution = create_solution(
-                    self._solution_class, code="", fitness=-float('inf'),
+                    self._solution_class, code=code, fitness=-float('inf'),
                     parent_ids=parent_ids, operator=operator, generation=generation,
                 )
                 solution.metadata["llm_response"] = response
-                solution.error = "No code extracted from response"
+
+                description = extract_description(response)
+                if description:
+                    solution.description = description
+
                 return solution
 
-            # Create solution using factory with lineage info
-            solution = create_solution(
-                self._solution_class, code=code, fitness=-float('inf'),
-                parent_ids=parent_ids, operator=operator, generation=generation,
-            )
-            solution.metadata["llm_response"] = response
-
-            description = extract_description(response)
-            if description:
-                solution.description = description
-
-            return solution
-
-        except Exception as e:
-            print(f"   [DEBUG] _generate_solution error: {e}")
-            solution = create_solution(
-                self._solution_class, code="", fitness=-float('inf'),
-                parent_ids=parent_ids, operator=operator, generation=generation,
-            )
-            solution.metadata["llm_response"] = response
-            solution.error = f"Generation error: {str(e)}"
-            return solution
+            except Exception as e:
+                import time
+                if attempt < max_retries - 1:
+                    print(f"   [DEBUG] _generate_solution error: {e}. Retrying ({attempt+1}/{max_retries})...")
+                    time.sleep(2 + attempt * 2) # Incremental backoff
+                    continue
+                else:
+                    print(f"   [DEBUG] _generate_solution final error: {e}")
+                    solution = create_solution(
+                        self._solution_class, code="", fitness=-float('inf'),
+                        parent_ids=parent_ids, operator=operator, generation=generation,
+                    )
+                    solution.metadata["llm_response"] = response
+                    solution.error = f"Generation error: {str(e)}"
+                    return solution
 
     def _select_parent(self, tournament_size: int = 2) -> Any:
         """Select a parent randomly (uniform selection).

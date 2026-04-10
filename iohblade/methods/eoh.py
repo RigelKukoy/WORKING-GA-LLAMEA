@@ -51,7 +51,7 @@ class _BladePrompts:
 
     def get_inout_inf(self):
         return (
-            f"Implement a Python class called `AlgorithmName` with"
+            f"Implement a Python class with a descriptive CamelCase name reflecting the algorithm's strategy (do NOT use generic names like `AlgorithmName`), with"
             f" an __init__(self, {', '.join(self.get_init_inputs())}) and a function {self.get_func_name()}(self, {', '.join(self.get_func_inputs())})"
             f" returning {', '.join(self.get_func_outputs())}."
         )
@@ -72,9 +72,18 @@ class _BladeProblemAdapter:
         self.prompts = _BladePrompts(problem)
 
     def evaluate(self, code_string):
+        cls_name = first_class_name(code_string)
+        if not cls_name or cls_name == "AlgorithmName":
+            doc = class_info(code_string)[1]
+            if doc:
+                # Derive a CamelCase name from the first line of the docstring
+                first_line = doc.strip().splitlines()[0].rstrip(".")
+                cls_name = re.sub(r"[^A-Za-z0-9]+", " ", first_line).title().replace(" ", "")
+            if not cls_name:
+                cls_name = "UnnamedAlgorithm"
         solution = Solution(
             code=code_string,
-            name=first_class_name(code_string) or "AlgorithmName",
+            name=cls_name,
             description=class_info(code_string)[1] or "No description provided.",
         )
         solution = self.problem(solution)
@@ -161,8 +170,13 @@ class EoH(Method):
 
         code = best.get("code", "")
         desc = best.get("algorithm", "")
-        name_match = re.search(r"class\s+(\w+)", code)
-        name = name_match.group(1) if name_match else "OptimizationAlgorithm"
+        name = first_class_name(code)
+        if not name or name == "AlgorithmName":
+            if desc:
+                first_line = desc.strip().splitlines()[0].rstrip(".")
+                name = re.sub(r"[^A-Za-z0-9]+", " ", first_line).title().replace(" ", "")
+            if not name:
+                name = "UnnamedAlgorithm"
         solution = Solution(code=code, name=name, description=desc)
         solution.set_scores(-best.get("objective", 0))
         return solution

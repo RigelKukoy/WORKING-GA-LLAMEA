@@ -10,9 +10,10 @@ from dotenv import load_dotenv
 if __name__ == "__main__":
     load_dotenv()
 
-    api_key = os.getenv("GEMINI_API_KEY")
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "asia-southeast1")
     ai_model = "gemini-2.0-flash"
-    llm1 = Gemini_LLM(api_key, ai_model)
+    llm1 = Gemini_LLM(project, location, ai_model)
     llm2 = Ollama_LLM("codestral")
     budget = 100
 

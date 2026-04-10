@@ -700,6 +700,10 @@ def plot_boxplot_fitness(
             lambda sol: sol.get("fitness", float("nan"))
         )
 
+    # Group by seed to get the maximum fitness per run
+    if "seed" in df.columns:
+        df = df.groupby(["problem_name", "method_name", "seed"])["fitness"].max().reset_index()
+
     if problems is None:
         problems = sorted(df["problem_name"].unique())
 
@@ -735,6 +739,8 @@ def plot_boxplot_fitness_hue(
     hue="method_name",
     x="problem_name",
     problems=None,
+    legend_fontsize=8,
+    legend_title_fontsize=9,
 ):
     """
     Plots boxplots of fitness grouped by `hue` and method_name `x`.
@@ -748,6 +754,10 @@ def plot_boxplot_fitness_hue(
         df["fitness"] = df["solution"].apply(
             lambda sol: sol.get("fitness", float("nan"))
         )
+
+    # Group by seed to get the maximum fitness per run
+    if "seed" in df.columns:
+        df = df.groupby(["problem_name", "method_name", "seed"])["fitness"].max().reset_index()
 
     if problems is None:
         problems = sorted(df["problem_name"].unique())
@@ -780,6 +790,12 @@ def plot_boxplot_fitness_hue(
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
         ax.set_title(problem)
+        legend = ax.get_legend()
+        if legend is not None:
+            if legend.get_title() is not None:
+                legend.get_title().set_fontsize(legend_title_fontsize)
+            for txt in legend.get_texts():
+                txt.set_fontsize(legend_fontsize)
 
     plt.tight_layout()
     plt.show()

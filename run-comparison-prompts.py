@@ -13,12 +13,13 @@ from dotenv import load_dotenv
 if __name__ == "__main__":
     load_dotenv()
 
-    api_key = os.getenv("GEMINI_API_KEY")
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "asia-southeast1")
     ai_model = "gemini-2.5-flash"
-    llm = Gemini_LLM(api_key, ai_model)
+    llm = Gemini_LLM(project, location, ai_model)
     budget = 100 
     
-    num_runs = 3
+    num_runs = 
     # Generates seeds starting from 4: [4, 5, 6, ...]
     seeds = [0 + i for i in range(num_runs)]
 

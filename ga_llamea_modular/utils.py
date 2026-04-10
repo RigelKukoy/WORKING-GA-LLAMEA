@@ -104,8 +104,9 @@ def extract_code(response: str) -> Optional[str]:
 def extract_description(response: str) -> str:
     """Extract algorithm description from LLM response.
     
-    Looks for "# Description: ..." or "# Name: ..." patterns, which
-    match the output format requested in prompts.
+    Extraction priority:
+        1. EoH-style brace format: {description here}
+        2. Markdown format: "# Description: ..." or "# Name: ..."
     
     Args:
         response: LLM response text
@@ -114,10 +115,21 @@ def extract_description(response: str) -> str:
         str: Extracted description, or empty string if not found
         
     Example:
+        >>> response = "{Adaptive differential evolution with self-tuning}\\n```python..."
+        >>> extract_description(response)
+        'Adaptive differential evolution with self-tuning'
         >>> response = "# Description: Adaptive differential evolution\\n```python..."
         >>> extract_description(response)
         'Adaptive differential evolution'
     """
+    # Try EoH-style brace format first
+    brace_match = re.search(r"\{([^{}]+)\}", response)
+    if brace_match:
+        desc = brace_match.group(1).strip()
+        if len(desc) > 10:  # Ensure it's a real description, not just "{}"
+            return desc
+    
+    # Fall back to markdown # Description: format
     match = re.search(
         r"#\s*(?:Description|Name):\s*(.*?)(?:\n|$)", 
         response, 

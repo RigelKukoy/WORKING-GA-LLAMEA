@@ -56,7 +56,7 @@ class Kerneltuner(Problem):
         name="kerneltuner",
         eval_timeout=600,
         budget=1000,
-        cache_dir="/data/neocortex/repos/benchmark_hub/",
+        cache_dir=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "benchmark_hub_data"),
         extra_info=False,
         dependencies=None,
         imports=None,
@@ -269,7 +269,6 @@ from kernel_tuner.strategies.wrapper import OptAlg
                 "custom_search_method_path": solution_path,
             }
         ]
-        # any additional settings
         override = {
             "experimental_groups_defaults": {
                 "parent_folder": str(path),
@@ -277,7 +276,7 @@ from kernel_tuner.strategies.wrapper import OptAlg
                 "samples": 32,
                 "minimum_fraction_of_budget_valid": 0.01,
                 "pattern_for_full_search_space_filenames": {
-                    "regex": "/data/neocortex/repos/benchmark_hub/cachefiles/${applications}/${gpus}_T4.json"
+                    "regex": f"{self.cache_dir.replace(chr(92), '/').rstrip('/')}/cachefiles/${chr(123)}applications{chr(125)}/${chr(123)}gpus{chr(125)}_T4.json"
                 },
             }
         }

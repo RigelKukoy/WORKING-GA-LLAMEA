@@ -60,8 +60,9 @@ Write a clean implementation from scratch."""
 
 if __name__ == "__main__":
     load_dotenv()
-    api_key = os.getenv("GEMINI_API_KEY")
-    llm = Gemini_LLM(api_key, "gemini-2.0-flash")
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "asia-southeast1")
+    llm = Gemini_LLM(project, location, "gemini-2.0-flash")
     
     budget = 10
     

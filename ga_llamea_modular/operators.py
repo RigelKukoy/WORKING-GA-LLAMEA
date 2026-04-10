@@ -99,7 +99,7 @@ class BaseOperator(ABC):
         return f"""{role_prompt}
 {task_prompt}
 {example_prompt}"""
-    
+
     def _get_population_history(self, population: List[Any]) -> str:
         """Get a summary of previously generated algorithms.
         
@@ -308,14 +308,15 @@ class CrossoverOperator(BaseOperator):
         task_prompt = self._get_task_prompt(problem)
         history = self._get_population_history(population)
         
-        # Only show the better parent's full code
-        # The weaker parents are described abstractly to prevent code-merging
+        # Show full code for all inspiration algorithms
         insp_texts = []
         for i, insp in enumerate(inspirations):
-            desc = f"\nStrategy: {insp.description}" if hasattr(insp, 'description') and insp.description else ""
-            insp_texts.append(f"Alternative approach {i+1} for inspiration: \"{insp.name}\" (fitness: {insp.fitness:.4f}){desc}")
-            
-        inspirations_str = "\n".join(insp_texts)
+            insp_texts.append(f"""Inspiration {i+1}: {insp.name} (fitness: {insp.fitness:.4f})
+```python
+{insp.code}
+```""")
+
+        inspirations_str = "\n\n".join(insp_texts)
         
         algo_details = f"""
 Working Algorithm (fitness: {parent.fitness:.4f}):
@@ -323,19 +324,13 @@ Working Algorithm (fitness: {parent.fitness:.4f}):
 {parent.code}
 ```
 
+These are other high-performing solutions discovered during the search.
+You may borrow useful ideas, logic, or techniques from them.
+
 {inspirations_str}
 """
         
-        if len(inspirations) == 1:
-            insp_names = f'"{inspirations[0].name}"'
-            concept_text = "what strategic concept it might use that could address a weakness"
-        else:
-            insp_names = ", ".join([f'"{insp.name}"' for insp in inspirations[:-1]]) + f' and "{inspirations[-1].name}"'
-            concept_text = "what strategic concepts they might use that could address weaknesses"
-            
-        instruction = f"""Create an improved algorithm by redesigning the working algorithm above.
-Draw inspiration from the alternative approach{"es" if len(inspirations)>1 else ""} {insp_names} — think about {concept_text} in the working algorithm.
-Write a clean implementation from scratch."""
+        instruction = "Create a new improved solution by combining ideas from the inspiration solutions while maintaining syntactic correctness."
         
         return f"{task_prompt}\n\n{history}\n{algo_details}\n\n{instruction}\n\n{problem.format_prompt}"
 
@@ -456,10 +451,12 @@ class RandomNewOperator(BaseOperator):
         is_init = kwargs.get("is_init", False)
 
         if is_init or self.use_init_prompt:
-            instruction = ""
-            history = "" # No history for initialization
-            # Avoid extra newlines when instruction and history are empty
-            return f"{task_prompt}\n\n{problem.format_prompt}"
+            # Use EoH-style structured format that enforces description in braces
+            cot_instruction = """First, describe your new algorithm and main steps in one sentence.
+The description must be inside curly braces like this: {Your algorithm description here}.
+Next, implement it in Python as a class with __init__(self, budget, dim) and __call__(self, func) methods.
+Do not give additional explanations."""
+            return f"{task_prompt}\n\n{cot_instruction}\n\n{problem.format_prompt}"
         
         # Use a minimal structural skeleton as reference
         reference = ""
@@ -490,7 +487,9 @@ class YourAlgorithm:
 Use a DIFFERENT strategy from the algorithms listed above. This template is only for correct structure and formatting.
 """
         
-        instruction = "Generate a new algorithm that is different from the algorithms you have tried before."
+        instruction = """Please help me create a new algorithm that has a totally different form from the given ones.
+
+Generate a completely novel approach that explores a different region of the algorithm design space."""
         
         return f"{task_prompt}\n\n{history}\n{reference}\n{instruction}\n\n{problem.format_prompt}"
 

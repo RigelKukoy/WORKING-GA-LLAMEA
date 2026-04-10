@@ -475,23 +475,58 @@ class DeepSeek_LLM(OpenAI_LLM):
         self.client = openai.OpenAI(**self._client_kwargs)
 
 
-class Gemini_LLM(LLM):
+class AIML_LLM(OpenAI_LLM):
     """
-    A manager class for handling requests to Google's Gemini models.
+    OpenAI-compatible chat via AI/ML API (https://aimlapi.com/).
+
+    Uses the same /v1/chat/completions surface as OpenAI; set your key from
+    https://aimlapi.com/app/keys and pass it or set AIMLAPI_API_KEY.
     """
 
     def __init__(
-        self, api_key, model="gemini-2.0-flash", generation_config=None, **kwargs
+        self,
+        api_key=None,
+        model="google/gemini-2.5-flash",
+        base_url="https://api.aimlapi.com/v1",
+        temperature=0.8,
+        **kwargs,
+    ):
+        import os
+
+        if api_key is None:
+            api_key = os.environ.get("AIMLAPI_API_KEY") or os.environ.get(
+                "AIML_API_KEY", ""
+            )
+        super().__init__(api_key, model=model, temperature=temperature, **kwargs)
+        self.base_url = base_url
+        self._client_kwargs["base_url"] = self.base_url
+        self.client = openai.OpenAI(**self._client_kwargs)
+
+
+class Gemini_LLM(LLM):
+    """
+    A manager class for handling requests to Google's Gemini models via Vertex AI.
+    """
+
+    def __init__(
+        self,
+        project,
+        location,
+        model="gemini-2.5-flash",
+        generation_config=None,
+        **kwargs,
     ):
         """
-        Initializes the LLM manager with an API key and model name.
+        Initializes the LLM manager with a Vertex AI project and location.
 
         Args:
-            api_key (str): api key for authentication.
-            model (str, optional): model abbreviation. Defaults to "gemini-2.0-flash".
-                Options are: "gemini-1.5-flash","gemini-2.0-flash", and others from Googles models library.
+            project (str): Google Cloud project ID.
+            location (str): Google Cloud region (e.g. "asia-southeast1").
+            model (str, optional): model abbreviation. Defaults to "gemini-2.5-flash".
+                Options are: "gemini-2.0-flash", "gemini-2.5-flash", and others
+                from the Vertex AI model garden.
         """
-        super().__init__(api_key, model, None, **kwargs)
+        super().__init__("", model, None, **kwargs)
         if generation_config is None:
             generation_config = {
                 "temperature": 1,
@@ -501,8 +536,9 @@ class Gemini_LLM(LLM):
                 "response_mime_type": "text/plain",
             }
 
-        self.client = genai.Client(api_key=api_key)
-        self.api_key = api_key
+        self.project = project
+        self.location = location
+        self.client = genai.Client(vertexai=True, project=project, location=location)
         self.generation_config = generation_config
 
     def _query(
@@ -561,7 +597,9 @@ class Gemini_LLM(LLM):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self.client = genai.Client(api_key=self.api_key)
+        self.client = genai.Client(
+            vertexai=True, project=self.project, location=self.location
+        )
 
     def __deepcopy__(self, memo):
         cls = self.__class__
@@ -571,7 +609,108 @@ class Gemini_LLM(LLM):
             if k == "client":
                 continue
             setattr(new, k, copy.deepcopy(v, memo))
-        new.client = genai.Client(api_key=new.api_key)
+        new.client = genai.Client(
+            vertexai=True, project=new.project, location=new.location
+        )
+        return new
+
+
+class GeminiAPI_LLM(LLM):
+    """
+    A manager class for handling requests to Google's Gemini models via
+    the public Gemini API (api.google.com), using an API key.
+    This does NOT require a Google Cloud project or Vertex AI.
+
+    Get an API key at: https://aistudio.google.com/app/apikey
+    Set it via the GEMINI_API_KEY environment variable, or pass it directly.
+    """
+
+    def __init__(
+        self,
+        api_key=None,
+        model="gemini-2.0-flash",
+        generation_config=None,
+        **kwargs,
+    ):
+        """
+        Initializes the Gemini API LLM manager.
+
+        Args:
+            api_key (str, optional): Gemini API key. If not given, reads
+                GEMINI_API_KEY from the environment.
+            model (str, optional): Model name. Defaults to \"gemini-2.0-flash\".
+        """
+        import os
+        if api_key is None:
+            api_key = os.environ.get("GEMINI_API_KEY", "")
+        super().__init__(api_key, model, None, **kwargs)
+
+        if generation_config is None:
+            generation_config = {
+                "temperature": 1,
+                "top_p": 0.95,
+                "top_k": 64,
+                "max_output_tokens": 65536,
+                "response_mime_type": "text/plain",
+            }
+        self.generation_config = generation_config
+        self._api_key = api_key
+        self.client = genai.Client(api_key=api_key)
+
+    def _query(
+        self, session_messages, max_retries: int = 5, default_delay: int = 10, **kwargs
+    ):
+        """
+        Sends the conversation history to Gemini and returns the reply.
+        """
+        history = [
+            {"role": m["role"], "parts": [m["content"]]} for m in session_messages[:-1]
+        ]
+        last = session_messages[-1]["content"]
+
+        attempt = 0
+        while True:
+            try:
+                config = self.generation_config.copy()
+                config.update(**kwargs)
+                chat = self.client.chats.create(
+                    model=self.model, history=history, config=config
+                )
+                response = chat.send_message(last)
+                return response.text
+
+            except Exception as err:
+                attempt += 1
+                if attempt > max_retries:
+                    raise
+
+                delay = getattr(err, "retry_delay", None)
+                if delay is not None:
+                    wait = delay.seconds + 1
+                else:
+                    m = re.search(r"retry_delay\s*{\s*seconds:\s*(\d+)", str(err))
+                    wait = int(m.group(1)) if m else default_delay * attempt
+
+                time.sleep(wait)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("client", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.client = genai.Client(api_key=self._api_key)
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memo[id(self)] = new
+        for k, v in self.__dict__.items():
+            if k == "client":
+                continue
+            setattr(new, k, copy.deepcopy(v, memo))
+        new.client = genai.Client(api_key=new._api_key)
         return new
 
 

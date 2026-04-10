@@ -213,8 +213,14 @@ class ExperimentLogger:
         frames = []
         for d in self.dirs:
             path = os.path.join(d, "experimentlog.jsonl")
-            if os.path.exists(path):
-                frames.append(pd.read_json(path, lines=True))
+            if not os.path.exists(path):
+                continue
+            if os.path.getsize(path) == 0:
+                continue
+            try:
+                frames.append(pd.read_json(path, lines=True, encoding="utf-8-sig"))
+            except ValueError:
+                pass
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
     def get_problem_data(self, problem_name):
@@ -240,13 +246,25 @@ class ExperimentLogger:
                         d, line["log_dir"]
                     )  # relative to *that* experiment
                     run_log = os.path.join(logdir, "log.jsonl")
-                    if os.path.exists(run_log):
-                        df = pd.read_json(run_log, lines=True)
-                        df["method_name"] = line["method_name"]
-                        df["problem_name"] = line["problem_name"]
-                        df["seed"] = line["seed"]
-                        df["_id"] = df.index
-                        bigdf = pd.concat([bigdf, df], ignore_index=True)
+                    if not os.path.exists(run_log):
+                        continue
+                    if os.path.getsize(run_log) == 0:
+                        # Empty/incomplete run log (often from interrupted runs)
+                        continue
+                    try:
+                        df = pd.read_json(run_log, lines=True, encoding="utf-8-sig")
+                    except ValueError:
+                        # Malformed/partial JSONL (e.g., truncated last line)
+                        continue
+                    if df.empty:
+                        continue
+                    if "fitness" in df.columns:
+                        df["fitness"] = pd.to_numeric(df["fitness"], errors="coerce")
+                    df["method_name"] = line["method_name"]
+                    df["problem_name"] = line["problem_name"]
+                    df["seed"] = line["seed"]
+                    df["_id"] = df.index
+                    bigdf = pd.concat([bigdf, df], ignore_index=True)
         return bigdf
 
     def get_methods_problems(self):

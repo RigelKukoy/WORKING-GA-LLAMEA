@@ -1,22 +1,16 @@
 """
-GA-LLAMEA Ablation Study: Warm-Up Phase + Larger Population
+GA-LLAMEA Ablation: Normal Initialization vs. 8 Init Prompts
 ============================================================
 
-This script runs an ablation study to test consistency improvements for
-GA-LLAMEA-WithRefine (4 arms). Both methods keep the refine arm to preserve
-the high ceiling (0.85+) while adding warm-up to eliminate bad runs.
+This script compares two variants of GA-LLAMEA-NoWarmup:
+1. Standard initialization (n_parents=4, init_oversample=1 -> 4 candidates)
+2. Oversampled initialization (n_parents=4, init_oversample=2 -> 8 candidates)
 
-Methods:
-1. GA-LLAMEA-Warmup:   4 arms + warm-up (24 evals uniform random before bandit)
-2. GA-LLAMEA-LargePop: 4 arms + warm-up + larger population (n_parents=6, n_offspring=12)
-
-Compare against existing results (loaded in the visualization notebook):
-- GA-LLAMEA-WithRefine (4 arms, no warm-up): 0.81 +/- 0.06
-- LLaMEA-Crossover3-NoRefine (target):       0.84 +/- 0.01
+The rest of the configuration is identical.
 """
 
 from iohblade.experiment import MA_BBOB_Experiment
-from iohblade.llm import Gemini_LLM
+from iohblade.llm import AIML_LLM
 from iohblade.loggers import ExperimentLogger
 from iohblade.solution import Solution
 from iohblade.problems import MA_BBOB
@@ -29,19 +23,22 @@ import numpy as np
 if __name__ == "__main__":
     load_dotenv()
 
-    api_key = os.getenv("GEMINI_API_KEY")
+    # AI/ML API (OpenAI-compatible); key from https://aimlapi.com/app/keys
+    ai_model = os.getenv("AIML_MODEL", "google/gemini-2.5-flash")
+    api_key = os.getenv("AIMLAPI_API_KEY") or os.getenv("AIML_API_KEY")
     if not api_key:
-        raise ValueError("GEMINI_API_KEY not found in environment. Please set it in .env file.")
+        raise SystemExit(
+            "Set AIMLAPI_API_KEY (or AIML_API_KEY) for AI/ML API. "
+            "See https://aimlapi.com/app/keys"
+        )
+    llm = AIML_LLM(api_key=api_key, model=ai_model)
     
-    ai_model = "gemini-2.5-flash"
-    llm = Gemini_LLM(api_key, ai_model)
-    
-    budget = 100
-    num_runs = 5
+    budget = 100 # Reduced budget for ablation efficiency, can increase if needed
+    num_runs = 1
     seeds = [0 + i for i in range(num_runs)]
 
     print("=" * 80)
-    print("GA-LLAMEA Warm-Up + Larger Population Ablation Study")
+    print("GA-LLAMEA Ablation: Init Size 4 vs 8")
     print("=" * 80)
     print(f"Budget: {budget} LLM queries per run")
     print(f"Runs: {num_runs}")
@@ -49,54 +46,54 @@ if __name__ == "__main__":
     print(f"LLM: {ai_model}")
     print()
 
-    # Method 1: 4 arms + min pulls (same pop size as existing WithRefine)
-    GA_LLaMEA_Warmup = GA_LLaMEA_Method(
+    # Method 1: GA-LLAMEA Baseline (4 init candidates)
+    GA_LLaMEA_Baseline = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        name="GA-LLAMEA-Warmup",
+        name="GA-LLAMEA-Baseline",
         n_parents=4,
         n_offspring=8,
         elitism=True,
         discount=0.99,
         tau_max=0.2,
-        epsilon_exploration=0.4,
+        epsilon_exploration=0.15,
         arm_names=["simplify", "crossover", "random_new", "refine"],
         num_crossover_inspirations=3,
         use_init_prompt_for_random_new=False,
-        min_pulls_per_arm=0,  # 6 * 4 arms = 24 calls (approx same as 24 warm_up_budget)
+        min_pulls_per_arm=0,
+        init_oversample=1, # Standard: 4 * 1 = 4 candidates
     )
-    print("Configured GA-LLAMEA-Warmup")
-    print("  Arms: simplify, crossover, random_new, refine")
-    print("  Warm-up: Min 6 pulls per arm (burn-in phase)")
-    print("  Population: n_parents=4, n_offspring=8")
+    print("Configured GA-LLAMEA-Baseline")
+    print("  Init Candidates: 4 (init_oversample=1)")
     print()
 
-    # Method 2: 4 arms + min pulls + larger population
-    GA_LLaMEA_LargePop = GA_LLaMEA_Method(
+    # Method 2: GA-LLAMEA Init-8 (8 init candidates)
+    GA_LLaMEA_Init8 = GA_LLaMEA_Method(
         llm=llm,
         budget=budget,
-        name="GA-LLAMEA-LargePop",
-        n_parents=6,
-        n_offspring=12,
+        name="GA-LLAMEA-Init8",
+        n_parents=4,
+        n_offspring=8,
         elitism=True,
         discount=0.99,
         tau_max=0.2,
-        epsilon_exploration=0.4,
+        epsilon_exploration=0.15,
         arm_names=["simplify", "crossover", "random_new", "refine"],
         num_crossover_inspirations=3,
         use_init_prompt_for_random_new=False,
-        min_pulls_per_arm=6,
+        min_pulls_per_arm=0,
+        init_oversample=2, # Experiment: 4 * 2 = 8 candidates
     )
-    print("Configured GA-LLAMEA-LargePop")
-    print("  Arms: simplify, crossover, random_new, refine")
-    print("  Warm-up: Min 6 pulls per arm (burn-in phase)")
-    print("  Population: n_parents=6, n_offspring=12")
+    print("Configured GA-LLAMEA-Init8")
+    print("  Init Candidates: 8 (init_oversample=2)")
     print()
 
-    methods = [GA_LLaMEA_Warmup]
-    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_dir = f"results/ABLATION-WARMUP-LARGEPOP_{timestamp}"
+    experiment_dir = f"results/ABLATION-INIT-SIZE_{timestamp}"
+    os.makedirs(experiment_dir, exist_ok=True)
+    
+    methods = [ GA_LLaMEA_Init8]
+    
     logger = ExperimentLogger(experiment_dir)
     
     print(f"Results will be saved to: {experiment_dir}")
@@ -190,9 +187,4 @@ if __name__ == "__main__":
     print("=" * 80)
     print("All Done!")
     print("=" * 80)
-    print()
-    print("Next steps:")
-    print(f"1. Analyze results in: {experiment_dir}")
-    print(f"2. View IOH data in: {ioh_dir}")
-    print("3. Compare GA-LLAMEA-Warmup and GA-LLAMEA-LargePop against existing WithRefine and Crossover3.")
     print()

@@ -23,12 +23,11 @@ if __name__ == "__main__":
     load_dotenv()
 
     # LLM Configuration
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY not found in environment. Please set it in .env file.")
-    
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "asia-southeast1")
+
     ai_model = "gemini-2.0-flash"
-    llm = Gemini_LLM(api_key, ai_model)
+    llm = Gemini_LLM(project, location, ai_model)
     
     # Experiment Configuration
     budget = 100  # LLM queries per run

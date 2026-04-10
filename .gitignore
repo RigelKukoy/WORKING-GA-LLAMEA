@@ -181,3 +181,37 @@ _site/
 
 # Apple File System
 .DS_Store
+
+# PDF files (private/generated reports)
+*.pdf
+
+# Private environment files
+.env
+*.env
+
+# Temporary output / log files
+test_err*.txt
+timing_output*.txt
+venv_timing_output.txt
+multiproc_output.txt
+analyze_output*.txt
+test_fix_output.txt
+test_algo_output.txt
+out.txt
+out2.txt
+k_out.txt
+errors.txt
+errors_by_operator.txt
+methods.txt
+llamea_path.txt
+llamea_source.txt
+
+# Zip archives
+*.zip
+
+# Temporary directories
+tmp_eoh4/
+test_results/
+
+# Benchmark data
+benchmark_hub_data/
