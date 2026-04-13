@@ -123,7 +123,7 @@ class GA_LLaMEA:
         always_select_best: bool = False,
         use_init_prompt_for_random_new: bool = False,
         num_crossover_inspirations: int = 1,
-        min_pulls_per_arm: int = 5,
+        min_pulls_per_arm: int = 0,
         init_oversample: int = 1,
         **kwargs,
     ):
@@ -163,7 +163,7 @@ class GA_LLaMEA:
             min_pulls_per_arm: Minimum number of times each operator must be selected
                               before the bandit strategy takes over. This "burn-in"
                               phase ensures initial statistics are based on real data.
-                              Default 5.
+                              Default 0 (no burn-in; D-TS takes over immediately).
             
             init_oversample: Multiplier for initial population generation. Generates
                             n_parents * init_oversample candidates and keeps the best

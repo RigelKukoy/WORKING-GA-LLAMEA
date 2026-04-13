@@ -10,7 +10,7 @@ from ..problem import Problem
 
 
 class LLaMEA(Method):
-    def __init__(self, llm: LLM, budget: int, name="LLaMEA", **kwargs):
+    def __init__(self, llm: LLM, budget: int, name="LLaMEA", algorithm_class=None, **kwargs):
         """
         Initializes the LLaMEA algorithm within the benchmarking framework.
 
@@ -27,6 +27,7 @@ class LLaMEA(Method):
         """
         super().__init__(llm, budget, name)
         self.kwargs = kwargs
+        self._algorithm_class = algorithm_class if algorithm_class is not None else LLAMEA_Algorithm
 
     def __call__(self, problem: Problem):
         """
@@ -41,7 +42,7 @@ class LLaMEA(Method):
         init_oversample = kwargs.pop("init_oversample", 1)
         n_parents = kwargs.get("n_parents", 5)
 
-        self.llamea_instance = LLAMEA_Algorithm(
+        self.llamea_instance = self._algorithm_class(
             f=problem,  # Ensure evaluation integrates with our framework
             llm=self.llm,
             role_prompt="You are a highly skilled computer scientist in the field of natural computing. Your task is to design novel metaheuristic algorithms to solve black box optimization problems.",

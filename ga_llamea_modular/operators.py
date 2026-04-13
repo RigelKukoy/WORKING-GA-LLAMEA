@@ -109,14 +109,19 @@ class BaseOperator(ABC):
         if not population:
             return ""
         
-        # Sort by fitness (best first)
-        sorted_pop = sorted(population, key=lambda s: s.fitness, reverse=True)
-        
+        import math
+        # Sort by fitness (best first), treating None/nan/inf as worst
+        sorted_pop = sorted(
+            population,
+            key=lambda s: s.fitness if s.fitness is not None and not math.isnan(s.fitness) else -math.inf,
+            reverse=True,
+        )
+
         history = "List of previously generated algorithm names with mean AOCC score:\n"
         for sol in sorted_pop:
             name = sol.name if sol.name else "Unknown"
-            fitness = sol.fitness if sol.fitness is not None else 0.0
-            history += f"- {name}: {fitness:.4f}\n"
+            fitness_str = f"{sol.fitness:.4f}" if sol.fitness is not None and math.isfinite(sol.fitness) else "N/A"
+            history += f"- {name}: {fitness_str}\n"
         return history
 
 

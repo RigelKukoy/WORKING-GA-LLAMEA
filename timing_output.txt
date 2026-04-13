@@ -1,34 +1,43 @@
-Importing ioh...
-ioh imported in 0.09s
-
-Running 4000 evaluations on BBOB f11 dim=5...
-  bounds.lb type=<class 'numpy.ndarray'>, shape=(5,), value=[-5. -5. -5. -5. -5.]
-  bounds.ub type=<class 'numpy.ndarray'>, shape=(5,), value=[5. 5. 5. 5. 5.]
-  4000 evals in 0.05s (75705 evals/sec)
-  best_f = 84.84101788454565
-
-Running 20 instances * 4000 evals each...
-  Instance 0: 0.19s  best_f=5.7463
-  Instance 1: 0.17s  best_f=1.3066
-  Instance 2: 0.15s  best_f=0.1845
-  Instance 3: 0.14s  best_f=0.4593
-  Instance 4: 0.13s  best_f=1.2537
-  Instance 5: 0.14s  best_f=0.3457
-  Instance 6: 0.15s  best_f=0.2947
-  Instance 7: 0.15s  best_f=0.4515
-  Instance 8: 0.14s  best_f=0.6716
-  Instance 9: 0.13s  best_f=2.7943
-  Instance 10: 0.13s  best_f=1.0096
-  Instance 11: 0.14s  best_f=0.0000
-  Instance 12: 0.14s  best_f=0.2434
-  Instance 13: 0.14s  best_f=0.3239
-  Instance 14: 0.14s  best_f=0.0002
-  Instance 15: 0.14s  best_f=0.1399
-  Instance 16: 0.14s  best_f=0.6250
-  Instance 17: 0.13s  best_f=0.4528
-  Instance 18: 0.14s  best_f=3.3904
-  Instance 19: 0.16s  best_f=0.0031
-
-Total for 20 instances: 2.89s
-That's 80000 total function evaluations
-Done!
+Traceback (most recent call last):
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\test_benchmarks_timing.py", line 23, in test_automl
+    print(f"  Result: {res.fitness_score} ({res.fitness_message})")
+                       ^^^^^^^^^^^^^^^^^
+AttributeError: 'Solution' object has no attribute 'fitness_score'
+Traceback (most recent call last):
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\test_benchmarks_timing.py", line 53, in test_photonics
+    res = prob.evaluate(sol)
+          ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\iohblade\problems\photonics.py", line 186, in evaluate
+    algorithm(self.problem)
+  File "<string>", line 12, in __call__
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\iohblade\problems\photonics_instances\problems\brag_mirror.py", line 61, in __call__
+    _, R = pm.coefficient_I(structure, self.target_wl, 0.0, 0)
+           ^^^^^^^^^^^^^^^^
+AttributeError: module 'PyMoosh' has no attribute 'coefficient_I'
+Traceback (most recent call last):
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\test_benchmarks_timing.py", line 55, in test_photonics
+    print(f"  Result: {res.fitness_score} ({res.fitness_message})")
+                       ^^^^^^^^^^^^^^^^^
+AttributeError: 'Solution' object has no attribute 'fitness_score'
+Traceback (most recent call last):
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\test_benchmarks_timing.py", line 53, in test_photonics
+    res = prob.evaluate(sol)
+          ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\iohblade\problems\photonics.py", line 186, in evaluate
+    algorithm(self.problem)
+  File "<string>", line 12, in __call__
+  File "C:\Users\Kukoy\Documents\Experiment-GA\WORKING-GA-LLAMEA\iohblade\problems\photonics_instances\problems\sophisticated_antireflection_design.py", line 71, in __call__
+    eff, _, _, _, _, _ = pm.photo(
+                         ^^^^^^^^
+AttributeError: module 'PyMoosh' has no attribute 'photo'
+Testing AutoML (Task 31)...
+  Failed: 'Solution' object has no attribute 'fitness_score'
+----------------------------------------
+Testing Photonics (bragg)...
+  Failed: module 'PyMoosh' has no attribute 'coefficient_I'
+----------------------------------------
+Testing Photonics (ellipsometry)...
+  Failed: 'Solution' object has no attribute 'fitness_score'
+----------------------------------------
+Testing Photonics (photovoltaic)...
+  Failed: module 'PyMoosh' has no attribute 'photo'

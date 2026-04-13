@@ -1,27 +1,23 @@
 """
-Ablation Study: LLaMEA-Crossover vs GA-LLaMEA (Matched Prompts)
-================================================================
+LLaMEA-Crossover with GA-LLaMEA-Matched Prompts
+=================================================
 
-This script compares two methods head-to-head using **identical prompts**:
+Runs LLaMEA-Crossover (uniform random operator selection) with prompts that
+are structurally identical to GA-LLaMEA's internal operators.
 
-  Method 1 — LLaMEA + Crossover (uniform random operator selection)
-      Arms : simplify | crossover | random_new
-      Selection : uniform random (each arm equally likely)
+PatchedLLaMEA overrides construct_prompt() for ALL four arms so that the
+prompt format — header, history, parent section, instruction — exactly mirrors
+what GA-LLaMEA's RefineOperator / SimplifyOperator / CrossoverOperator /
+RandomNewOperator produce. This means the only remaining variable when comparing
+this run against a GA-LLaMEA run is the operator selection strategy:
+  LLaMEA-Crossover = uniform random
+  GA-LLaMEA        = Discounted Thompson Sampling (D-TS bandit)
 
-  Method 2 — GA-LLaMEA (Discounted Thompson Sampling operator selection)
-      Arms : simplify | crossover | random_new
-      Selection : D-TS bandit (adaptive, learns which arm works best)
-
-Both methods use the exact same prompt text for every operator arm:
-  • simplify   → "Refine and simplify the selected algorithm to improve it."
-  • crossover  → Guided code-level concept transfer (shows full code of both
-                 parent and inspirations, same structure as CrossoverOperator)
-  • random_new → Structural-reference prompt with novelty instruction
-
-The only variable between the two methods is the operator selection strategy:
-  LLaMEA = uniform random  vs  GA-LLaMEA = adaptive D-TS bandit.
-
-This isolates the contribution of adaptive operator selection from prompt design.
+Prompt format per arm (matches GA-LLaMEA exactly):
+  refine     → role + task + example | history | Selected algorithm… Name/Fitness/Code | instruction
+  simplify   → role + task + example | history | Selected algorithm… Name/Fitness/Code | instruction
+  crossover  → role + task + example | history | Working Algorithm… | inspirations | instruction
+  random_new → role + task + example | history | structural skeleton | instruction  (no parent)
 """
 
 import os
@@ -30,13 +26,15 @@ import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
 
+from llamea import LLaMEA as _LLAMEA_Algorithm
+
 from iohblade.experiment import MA_BBOB_Experiment
-from iohblade.llm import GeminiAPI_LLM
+from iohblade.llm import AIML_LLM
 from iohblade.loggers import ExperimentLogger
 from iohblade.solution import Solution
 from iohblade.problems import MA_BBOB
-from iohblade.methods.ga_llamea import GA_LLaMEA_Method
 from iohblade.methods.llamea import LLaMEA
+from iohblade.methods.ga_llamea import GA_LLaMEA_Method
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -83,66 +81,177 @@ CROSSOVER_INSTRUCTION = (
     "solutions while maintaining syntactic correctness."
 )
 
+# Compound prompt for LLaMEA's random_new arm.
+# PatchedLLaMEA detects this arm via RANDOM_NEW_MARKER and builds the prompt
+# without any parent code — matching RandomNewOperator's behaviour exactly.
+RANDOM_NEW_MUTATION_PROMPT = STRUCTURAL_REFERENCE + "\n\n" + RANDOM_NEW_INSTRUCTION
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  DynamicCrossoverPrompt for LLaMEA
-#  Mirrors CrossoverOperator.build_prompt() exactly — shows full code of both
-#  the selected parent (provided by LLaMEA's own prompt builder) and all
-#  inspiration parents.
+#  PatchedLLaMEA — full GA-LLaMEA prompt format for all four arms
+#
+#  Overrides construct_prompt() entirely so that each arm's prompt is
+#  structurally identical to the corresponding GA-LLaMEA operator:
+#    refine     → RefineOperator.build_prompt()
+#    simplify   → SimplifyOperator.build_prompt()
+#    crossover  → CrossoverOperator.build_prompt()
+#    random_new → RandomNewOperator.build_prompt()  (no parent code)
+#
+#  Differences eliminated vs the original LLaMEA construct_prompt():
+#    ✓ example_prompt now included in every mutation call
+#    ✓ History format: "- name: X.XXXX" sorted by fitness (not "name: desc (Score: X)")
+#    ✓ Parent section: Name/Fitness/Code labels (not "The selected solution to update")
+#    ✓ Feedback section: removed (GA-LLaMEA operators do not include it)
+#    ✓ random_new: no parent shown at all (only structural skeleton)
+#    ✓ crossover: "Working Algorithm (fitness: X):" label matching CrossoverOperator
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PatchedLLaMEA(_LLAMEA_Algorithm):
+    """LLaMEA with construct_prompt() rebuilt to match GA-LLaMEA's exact format."""
+
+    RANDOM_NEW_MARKER = "For correct code structure, follow this template:"
+
+    def _ga_header(self) -> str:
+        """role + task + example — matches GA-LLaMEA's _get_task_prompt()."""
+        return f"{self.role_prompt}\n{self.task_prompt}\n{self.example_prompt}"
+
+    def _ga_history(self) -> str:
+        """Sorted-by-fitness list — matches GA-LLaMEA's _get_population_history()."""
+        sorted_pop = sorted(
+            self.population,
+            key=lambda s: s.fitness if s.fitness is not None and not np.isnan(s.fitness) else -np.inf,
+            reverse=True,
+        )
+        lines = "List of previously generated algorithm names with mean AOCC score:\n"
+        for sol in sorted_pop:
+            fitness_str = f"{sol.fitness:.4f}" if sol.fitness is not None and np.isfinite(sol.fitness) else "N/A"
+            lines += f"- {sol.name}: {fitness_str}\n"
+        return lines
+
+    def construct_prompt(self, individual):
+        mutation_operator = random.choice(self.mutation_prompts)
+        individual.set_operator(mutation_operator)
+
+        # Detect arm without calling __str__ on DynamicCrossoverPrompt twice
+        is_crossover = isinstance(mutation_operator, DynamicCrossoverPrompt)
+        mutation_str = "" if is_crossover else str(mutation_operator)
+
+        header  = self._ga_header()
+        history = self._ga_history()
+        fmt     = self.output_format_prompt
+
+        fitness_val = individual.fitness
+        fitness_str = f"{fitness_val:.4f}" if fitness_val is not None and np.isfinite(fitness_val) else "N/A"
+
+        if mutation_str.startswith(self.RANDOM_NEW_MARKER):
+            # random_new — no parent, only structural skeleton + instruction
+            content = (
+                f"{header}\n\n"
+                f"{history}\n"
+                f"{mutation_str}\n\n"
+                f"{fmt}"
+            )
+
+        elif is_crossover:
+            # crossover — matches CrossoverOperator.build_prompt() exactly
+            inspirations_str = mutation_operator.get_inspirations_str()
+            working_block = (
+                f"Working Algorithm (fitness: {fitness_str}):\n"
+                f"```python\n{individual.code}\n```"
+            )
+            if inspirations_str:
+                cross_body = (
+                    f"{working_block}\n\n"
+                    f"These are other high-performing solutions discovered during the search.\n"
+                    f"You may borrow useful ideas, logic, or techniques from them.\n\n"
+                    f"{inspirations_str}"
+                )
+            else:
+                cross_body = working_block
+            content = (
+                f"{header}\n\n"
+                f"{history}\n"
+                f"{cross_body}\n\n"
+                f"{CROSSOVER_INSTRUCTION}\n\n"
+                f"{fmt}"
+            )
+
+        elif mutation_str.startswith("Refine and simplify"):
+            # simplify — matches SimplifyOperator.build_prompt()
+            content = (
+                f"{header}\n\n"
+                f"{history}\n"
+                f"Selected algorithm to simplify and improve:\n"
+                f"Name: {individual.name}\n"
+                f"Fitness: {fitness_str}\n"
+                f"Code:\n```python\n{individual.code}\n```\n\n"
+                f"{mutation_str}\n\n"
+                f"{fmt}"
+            )
+
+        else:
+            # refine (default) — matches RefineOperator.build_prompt()
+            content = (
+                f"{header}\n\n"
+                f"{history}\n"
+                f"Selected algorithm to refine and improve:\n"
+                f"Name: {individual.name}\n"
+                f"Fitness: {fitness_str}\n"
+                f"Code:\n```python\n{individual.code}\n```\n\n"
+                f"{mutation_str}\n\n"
+                f"{fmt}"
+            )
+
+        return [{"role": "user", "content": content}]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  DynamicCrossoverPrompt
+#  Acts as a sentinel in mutation_prompts so PatchedLLaMEA can detect the
+#  crossover arm via isinstance(), and provides get_inspirations_str() so
+#  PatchedLLaMEA can build the full CrossoverOperator-format prompt itself.
 # ─────────────────────────────────────────────────────────────────────────────
 
 class DynamicCrossoverPrompt:
     """
-    String-like object that injects inspiration code into the crossover
-    mutation instruction at runtime, matching GA-LLaMEA's CrossoverOperator.
+    Sentinel + inspiration-sampler for the crossover arm.
 
-    LLaMEA appends mutation_prompts[i] as the instruction suffix after its
-    own prompt header (role + task + history + selected parent code).
-
-    This prompt adds:
-      - Full code of N inspiration parents drawn from the current population
-      - The same CROSSOVER_INSTRUCTION wording used by CrossoverOperator
-
-    The result is prompt-identical to GA-LLaMEA's crossover arm.
+    PatchedLLaMEA detects this object via isinstance() and calls
+    get_inspirations_str() to retrieve the inspiration code blocks.
+    It then builds the full prompt in GA-LLaMEA's CrossoverOperator format.
     """
 
     def __init__(self, llamea_method_wrapper, num_inspirations: int = 3):
         self._wrapper = llamea_method_wrapper
         self.num_inspirations = num_inspirations
 
-    def __str__(self) -> str:
+    def _valid_population(self):
         llamea_instance = getattr(self._wrapper, "llamea_instance", None)
         if not llamea_instance or not llamea_instance.population:
-            # Fallback before any population exists (very first call)
-            return CROSSOVER_INSTRUCTION
-
-        valid_pop = [
+            return []
+        return [
             p for p in llamea_instance.population
-            if p.name and p.code and p.fitness is not None and not np.isinf(p.fitness)
+            if p.name and p.code and p.fitness is not None and np.isfinite(p.fitness)
         ]
 
+    def get_inspirations_str(self) -> str:
+        """Return inspiration code blocks — same format as CrossoverOperator."""
+        valid_pop = self._valid_population()
         if not valid_pop:
-            return CROSSOVER_INSTRUCTION
-
-        # Randomly sample inspiration parents (up to num_inspirations)
+            return ""
         n = min(self.num_inspirations, len(valid_pop))
         inspirations = random.sample(valid_pop, n)
-
-        # Build inspiration blocks — full code, same format as CrossoverOperator
-        insp_blocks = []
+        blocks = []
         for i, insp in enumerate(inspirations):
-            insp_blocks.append(
+            blocks.append(
                 f"Inspiration {i + 1}: {insp.name} (fitness: {insp.fitness:.4f})\n"
                 f"```python\n{insp.code}\n```"
             )
-        inspirations_str = "\n\n".join(insp_blocks)
+        return "\n\n".join(blocks)
 
-        return (
-            "These are other high-performing solutions discovered during the search.\n"
-            "You may borrow useful ideas, logic, or techniques from them.\n\n"
-            f"{inspirations_str}\n\n"
-            f"{CROSSOVER_INSTRUCTION}"
-        )
+    def __str__(self) -> str:
+        """Fallback string representation (used for operator logging)."""
+        return f"crossover ({self.num_inspirations} inspirations)"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -152,10 +261,10 @@ class DynamicCrossoverPrompt:
 if __name__ == "__main__":
     load_dotenv()
 
-    api_key  = os.getenv("GEMINI_API_KEY")
-    ai_model = "gemini-2.0-flash"
+    api_key  = os.getenv("AIML_API_KEY") or os.getenv("AIMLAPI_API_KEY")
+    ai_model = "google/gemini-2.0-flash"
 
-    llm = GeminiAPI_LLM(api_key=api_key, model=ai_model)
+    llm = AIML_LLM(api_key=api_key, model=ai_model)
 
     budget   = 100   # LLM queries per run
     num_runs = 5     # Runs per method for statistical significance
@@ -167,29 +276,34 @@ if __name__ == "__main__":
     INIT_OVERSAMPLE = 2              # Both methods: generate N_PARENTS*2 init candidates, keep best N_PARENTS
 
     print("=" * 80)
-    print("Ablation: LLaMEA-Crossover  vs  GA-LLaMEA  (Matched Prompts)")
+    print("LLaMEA-Crossover vs GA-LLaMEA  (ablation: operator selection only)")
     print("=" * 80)
     print(f"Model          : {ai_model}")
     print(f"Budget         : {budget} LLM queries per run")
     print(f"Runs           : {num_runs}  (seeds {seeds})")
     print(f"n_parents      : {N_PARENTS}  |  n_offspring: {N_OFFSPRING}")
     print(f"init_oversample: {INIT_OVERSAMPLE}  ({N_PARENTS}*{INIT_OVERSAMPLE}={N_PARENTS*INIT_OVERSAMPLE} init candidates → keep best {N_PARENTS})")
-    print(f"Inspirations   : {NUM_CROSSOVER_INSPIRATIONS} (crossover arm, both methods)")
+    print(f"Inspirations   : {NUM_CROSSOVER_INSPIRATIONS} (crossover arm)")
     print()
 
-    # ── Method 1: LLaMEA + Crossover (uniform random selection) ──────────────
+    # ── LLaMEA-Crossover (uniform random, GA-LLaMEA-format prompts) ──────────
     #
-    # Arms: simplify | crossover | random_new
-    # Each arm is equally probable (LLaMEA selects from mutation_prompts uniformly).
-    # The crossover arm uses DynamicCrossoverPrompt which mirrors CrossoverOperator.
+    # PatchedLLaMEA overrides construct_prompt() for all four arms so the
+    # prompt format is identical to GA-LLaMEA's internal operators:
+    #   refine     → RefineOperator.build_prompt()    format
+    #   simplify   → SimplifyOperator.build_prompt()  format
+    #   crossover  → CrossoverOperator.build_prompt() format
+    #   random_new → RandomNewOperator.build_prompt() format  (no parent)
     #
-    # init_oversample=2 is handled by the LLaMEA iohblade wrapper: it generates
-    # n_parents * 2 = 8 candidates, keeps best 4, then runs normally with n_parents=4.
+    # The ONLY difference vs a GA-LLaMEA run is operator selection:
+    #   here  = uniform random
+    #   GA    = Discounted Thompson Sampling (D-TS bandit)
 
     LLaMEA_Crossover = LLaMEA(
         llm=llm,
         budget=budget,
         name="LLaMEA-Crossover",
+        algorithm_class=PatchedLLaMEA,
         n_parents=N_PARENTS,
         n_offspring=N_OFFSPRING,
         elitism=True,
@@ -199,31 +313,21 @@ if __name__ == "__main__":
     crossover_prompt = DynamicCrossoverPrompt(LLaMEA_Crossover, num_inspirations=NUM_CROSSOVER_INSPIRATIONS)
 
     LLaMEA_Crossover.kwargs["mutation_prompts"] = [
-        REFINE_INSTRUCTION,         # arm: refine
-        SIMPLIFY_INSTRUCTION,       # arm: simplify
-        RANDOM_NEW_INSTRUCTION,     # arm: random_new
-        crossover_prompt,           # arm: crossover  (dynamic, runtime-evaluated)
+        REFINE_INSTRUCTION,           # arm: refine
+        SIMPLIFY_INSTRUCTION,         # arm: simplify
+        RANDOM_NEW_MUTATION_PROMPT,   # arm: random_new (structural skeleton, no parent)
+        crossover_prompt,             # arm: crossover  (DynamicCrossoverPrompt sentinel)
     ]
 
     print("✓ LLaMEA-Crossover")
+    print("  Prompts   : GA-LLaMEA-format (role+task+example | history | parent section)")
     print("  Selection : uniform random")
     print("  Arms      : refine | simplify | random_new | crossover")
     print(f"  Init      : {N_PARENTS*INIT_OVERSAMPLE} candidates → keep best {N_PARENTS} (init_oversample={INIT_OVERSAMPLE})")
     print(f"  Crossover : {NUM_CROSSOVER_INSPIRATIONS} inspiration(s), full-code format")
     print()
 
-    # ── Method 2: GA-LLaMEA (D-TS adaptive selection) ────────────────────────
-    #
-    # Same 3 arms as Method 1.
-    # GA-LLaMEA's built-in operators already use:
-    #   RefineOperator    → same REFINE_INSTRUCTION
-    #   SimplifyOperator  → same SIMPLIFY_INSTRUCTION
-    #   CrossoverOperator → same full-code format + CROSSOVER_INSTRUCTION
-    #   RandomNewOperator → same RANDOM_NEW_INSTRUCTION + structural reference
-    #
-    # init_oversample=2: generates n_parents * 2 = 16 init candidates, keeps best 8.
-    # This matches the GA-LLAMEA-8-INIT-100 config from the manuscript (Section 4.6.2)
-    # which showed 7.9% improvement and much lower variance vs init_oversample=1.
+    # ── GA-LLaMEA (Discounted Thompson Sampling) ──────────────────────────────
 
     GA_LLaMEA = GA_LLaMEA_Method(
         llm=llm,
@@ -239,6 +343,7 @@ if __name__ == "__main__":
         num_crossover_inspirations=NUM_CROSSOVER_INSPIRATIONS,
         use_init_prompt_for_random_new=False,
         init_oversample=INIT_OVERSAMPLE,
+        min_pulls_per_arm=0,
     )
 
     print("✓ GA-LLaMEA")
@@ -246,7 +351,7 @@ if __name__ == "__main__":
     print("  Arms      : simplify | crossover | random_new | refine")
     print(f"  Init      : {N_PARENTS*INIT_OVERSAMPLE} candidates → keep best {N_PARENTS} (init_oversample={INIT_OVERSAMPLE})")
     print(f"  Crossover : {NUM_CROSSOVER_INSPIRATIONS} inspiration(s), full-code format")
-    print(f"  Discount  : 0.99  |  tau_max: 0.2  |  epsilon: 0.15")
+    print(f"  Discount  : 0.99  |  tau_max: 0.2  |  epsilon: 0.15  |  min_pulls: 0")
     print()
 
     # ── Experiment setup ──────────────────────────────────────────────────────
@@ -350,12 +455,6 @@ if __name__ == "__main__":
     print("=" * 80)
     print("All done!")
     print("=" * 80)
-    print()
-    print("What this ablation isolates:")
-    print("  • Both methods used identical prompt text for every arm.")
-    print("  • The ONLY difference is operator selection strategy:")
-    print("      LLaMEA-Crossover → uniform random (no learning)")
-    print("      GA-LLaMEA        → D-TS bandit   (adaptive learning)")
     print()
     print(f"Results in : {experiment_dir}")
     print(f"IOH data   : {ioh_dir}")
